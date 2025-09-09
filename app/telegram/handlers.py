@@ -671,7 +671,7 @@ class TelegramHandlers:
         """Handle normal conversation flow."""
         try:
             # Generate response based on message content
-            response = await self._generate_response(message.text, session)
+            response = await self._generate_response(message.text, session, message)
             
             # Use enhanced typing simulation for message responses
             try:
@@ -744,10 +744,52 @@ class TelegramHandlers:
             logger.error("Error in normal conversation", error=str(e))
             raise
     
-    async def _generate_response(self, text: str, session) -> str:
-        """Generate contextual response to user message."""
+    async def _generate_response(self, text: str, session, message: Message) -> str:
+        """Generate intelligent AI response using LLM integration."""
         try:
-            # Simple response generation (in production, this would use ML/AI)
+            # Try to use LLM integration service if available
+            try:
+                from app.services.llm_integration import get_llm_integration_service
+                from app.database.connection import get_async_session
+                
+                # Get database session
+                async with get_async_session() as db_session:
+                    llm_service = await get_llm_integration_service(db_session)
+                    
+                    # Generate AI response with full integration
+                    response_content, metadata = await llm_service.create_telegram_integration(
+                        user_id=message.from_user.id,
+                        chat_id=message.chat.id,
+                        message_text=text,
+                        bot=message.bot,
+                        message=message,
+                        conversation_session=session
+                    )
+                    
+                    logger.info(
+                        "Generated AI response",
+                        user_id=message.from_user.id,
+                        model=metadata.get('model_used', 'unknown'),
+                        response_time=metadata.get('response_time_ms', 0),
+                        tokens=metadata.get('tokens_used', {}).get('total', 0),
+                        cost=metadata.get('cost_estimate', 0.0),
+                        personality_applied=metadata.get('personality_applied', False)
+                    )
+                    
+                    return response_content
+                    
+            except Exception as llm_error:
+                logger.warning(f"LLM service unavailable, using fallback: {llm_error}")
+                # Fall back to simple response generation
+                return await self._generate_fallback_response(text, session)
+                
+        except Exception as e:
+            logger.error("Error generating response", error=str(e))
+            return "I'm here to help! What can I do for you?"
+    
+    async def _generate_fallback_response(self, text: str, session) -> str:
+        """Generate fallback response when LLM is unavailable."""
+        try:
             text_lower = text.lower()
             
             # Greeting patterns
@@ -763,6 +805,14 @@ class TelegramHandlers:
             if '?' in text:
                 return "That's an interesting question! Let me think about it... 🤔"
             
+            # Help requests
+            if any(word in text_lower for word in ['help', 'assist', 'support']):
+                return "I'd be happy to help you! Could you tell me more about what you need assistance with?"
+            
+            # Gratitude
+            if any(word in text_lower for word in ['thank', 'thanks']):
+                return "You're welcome! Is there anything else I can help you with?"
+            
             # Default responses
             responses = [
                 "I understand. Can you tell me more about that?",
@@ -774,7 +824,7 @@ class TelegramHandlers:
             return responses[hash(text) % len(responses)]
             
         except Exception as e:
-            logger.error("Error generating response", error=str(e))
+            logger.error("Error generating fallback response", error=str(e))
             return "I'm here to help! What can I do for you?"
     
     async def _handle_waiting_input(
