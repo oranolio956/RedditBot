@@ -1,0 +1,397 @@
+# Production Docker Compose Configuration
+# High-availability setup with clustering, monitoring, and security
+
+version: '3.8'
+
+services:
+  # ==================== Load Balancer ====================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: ai-conversation-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - app-1
+      - app-2
+    networks:
+      - frontend
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=false"
+
+  # ==================== Application Instances ====================
+  app-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: ai-conversation-app-1
+    restart: unless-stopped
+    environment:
+      # Application
+      ENVIRONMENT: production
+      DEBUG: false
+      LOG_LEVEL: WARNING
+      HOST: 0.0.0.0
+      PORT: 8000
+      WORKERS: 1
+      
+      # Database
+      DB_HOST: postgres-master
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-ai_conversation}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_POOL_SIZE: 30
+      DB_MAX_OVERFLOW: 50
+      
+      # Redis Cluster
+      REDIS_CLUSTER_ENABLED: true
+      REDIS_CLUSTER_NODES: redis-1:6379,redis-2:6379,redis-3:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_MAX_CONNECTIONS: 100
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      
+      # Telegram
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
+      
+      # ML Configuration
+      ML_DEVICE: cpu
+      ML_MODEL_PATH: /app/models
+      ML_MODEL_CACHE_SIZE: 5
+      
+      # Celery
+      CELERY_BROKER_URL: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/1
+      CELERY_RESULT_BACKEND: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/2
+      
+      # Monitoring
+      SENTRY_DSN: ${SENTRY_DSN}
+      SENTRY_ENVIRONMENT: production
+      METRICS_ENABLED: true
+      METRICS_PORT: 8001
+      
+      # Rate Limiting
+      RATE_LIMIT_ENABLED: true
+      RATE_LIMIT_PER_MINUTE: 120
+      RATE_LIMIT_PER_HOUR: 5000
+      
+      # Advanced Typing
+      ENABLE_ADVANCED_TYPING: true
+      MAX_TYPING_SESSIONS: 500
+    ports:
+      - "8001:8000"
+      - "8101:8001"
+    volumes:
+      - app_models:/app/models:ro
+      - app_logs_1:/app/logs
+      - app_temp_1:/app/temp
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+      redis-1:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  app-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: ai-conversation-app-2
+    restart: unless-stopped
+    environment:
+      # Copy from app-1 with different instance ID
+      ENVIRONMENT: production
+      DEBUG: false
+      LOG_LEVEL: WARNING
+      HOST: 0.0.0.0
+      PORT: 8000
+      WORKERS: 1
+      INSTANCE_ID: 2
+      
+      # Database
+      DB_HOST: postgres-master
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-ai_conversation}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_POOL_SIZE: 30
+      DB_MAX_OVERFLOW: 50
+      
+      # Redis Cluster
+      REDIS_CLUSTER_ENABLED: true
+      REDIS_CLUSTER_NODES: redis-1:6379,redis-2:6379,redis-3:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_MAX_CONNECTIONS: 100
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      
+      # Telegram
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
+      
+      # ML Configuration
+      ML_DEVICE: cpu
+      ML_MODEL_PATH: /app/models
+      ML_MODEL_CACHE_SIZE: 5
+      
+      # Celery
+      CELERY_BROKER_URL: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/1
+      CELERY_RESULT_BACKEND: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/2
+      
+      # Monitoring
+      SENTRY_DSN: ${SENTRY_DSN}
+      SENTRY_ENVIRONMENT: production
+      METRICS_ENABLED: true
+      METRICS_PORT: 8001
+      
+      # Rate Limiting
+      RATE_LIMIT_ENABLED: true
+      RATE_LIMIT_PER_MINUTE: 120
+      RATE_LIMIT_PER_HOUR: 5000
+      
+      # Advanced Typing
+      ENABLE_ADVANCED_TYPING: true
+      MAX_TYPING_SESSIONS: 500
+    ports:
+      - "8002:8000"
+      - "8102:8001"
+    volumes:
+      - app_models:/app/models:ro
+      - app_logs_2:/app/logs
+      - app_temp_2:/app/temp
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+      redis-1:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ==================== Worker Instances ====================
+  worker-general-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    container_name: ai-conversation-worker-general-1
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=warning", "--concurrency=4", "--prefetch-multiplier=1", "--queue=general,default"]
+    environment:
+      ENVIRONMENT: production
+      LOG_LEVEL: WARNING
+      
+      # Database
+      DB_HOST: postgres-master
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-ai_conversation}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      
+      # Redis Cluster
+      REDIS_CLUSTER_ENABLED: true
+      REDIS_CLUSTER_NODES: redis-1:6379,redis-2:6379,redis-3:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      
+      # Celery
+      CELERY_BROKER_URL: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/1
+      CELERY_RESULT_BACKEND: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/2
+      CELERY_WORKER_CONCURRENCY: 4
+      
+      # Monitoring
+      SENTRY_DSN: ${SENTRY_DSN}
+      SENTRY_ENVIRONMENT: production
+    volumes:
+      - app_logs_worker_1:/app/logs
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+      redis-1:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  worker-ml-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    container_name: ai-conversation-worker-ml-1
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=warning", "--concurrency=2", "--prefetch-multiplier=1", "--queue=ml_tasks"]
+    environment:
+      ENVIRONMENT: production
+      LOG_LEVEL: WARNING
+      
+      # Database
+      DB_HOST: postgres-master
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-ai_conversation}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      
+      # Redis Cluster
+      REDIS_CLUSTER_ENABLED: true
+      REDIS_CLUSTER_NODES: redis-1:6379,redis-2:6379,redis-3:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      
+      # ML Configuration
+      ML_DEVICE: cpu
+      ML_MODEL_PATH: /app/models
+      ML_MODEL_CACHE_SIZE: 3
+      
+      # Celery
+      CELERY_BROKER_URL: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/1
+      CELERY_RESULT_BACKEND: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/2
+      CELERY_WORKER_CONCURRENCY: 2
+      
+      # Monitoring
+      SENTRY_DSN: ${SENTRY_DSN}
+      SENTRY_ENVIRONMENT: production
+    volumes:
+      - app_models:/app/models:ro
+      - app_logs_worker_ml_1:/app/logs
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+      redis-1:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '3.0'
+          memory: 6G
+        reservations:
+          cpus: '2.0'
+          memory: 3G
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: scheduler
+    container_name: ai-conversation-scheduler
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      LOG_LEVEL: WARNING
+      
+      # Database
+      DB_HOST: postgres-master
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-ai_conversation}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      
+      # Redis Cluster
+      REDIS_CLUSTER_ENABLED: true
+      REDIS_CLUSTER_NODES: redis-1:6379,redis-2:6379,redis-3:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      
+      # Celery
+      CELERY_BROKER_URL: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/1
+      CELERY_RESULT_BACKEND: redis-cluster://redis-1:6379,redis-2:6379,redis-3:6379/2
+      
+      # Monitoring
+      SENTRY_DSN: ${SENTRY_DSN}
+      SENTRY_ENVIRONMENT: production
+    volumes:
+      - app_logs_scheduler:/app/logs
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+      redis-1:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==================== Database Cluster ====================
+  postgres-master:
+    image: postgres:15-alpine
+    container_name: ai-conversation-postgres-master
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ai_conversation}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      # Replication settings
+      POSTGRES_REPLICATION_USER: ${DB_REPLICATION_USER:-replicator}
+      POSTGRES_REPLICATION_PASSWORD: ${DB_REPLICATION_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_master_data:/var/lib/postgresql/data
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/init-scripts:/docker-entrypoint-initdb.d:ro
+    command: |\n      postgres\n        -c config_file=/etc/postgresql/postgresql.conf\n    networks:\n      - backend\n    deploy:\n      resources:\n        limits:\n          cpus: '4.0'\n          memory: 8G\n        reservations:\n          cpus: '2.0'\n          memory: 4G\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U ${DB_USER} -d ${DB_NAME}\"]\n      interval: 10s\n      timeout: 5s\n      retries: 5\n\n  postgres-slave:\n    image: postgres:15-alpine\n    container_name: ai-conversation-postgres-slave\n    restart: unless-stopped\n    environment:\n      POSTGRES_DB: ${DB_NAME:-ai_conversation}\n      POSTGRES_USER: ${DB_USER}\n      POSTGRES_PASSWORD: ${DB_PASSWORD}\n      POSTGRES_MASTER_SERVICE: postgres-master\n      POSTGRES_REPLICATION_USER: ${DB_REPLICATION_USER:-replicator}\n      POSTGRES_REPLICATION_PASSWORD: ${DB_REPLICATION_PASSWORD}\n    ports:\n      - \"5433:5432\"\n    volumes:\n      - postgres_slave_data:/var/lib/postgresql/data\n      - ./postgres/recovery.conf:/etc/postgresql/recovery.conf:ro\n    depends_on:\n      postgres-master:\n        condition: service_healthy\n    networks:\n      - backend\n    deploy:\n      resources:\n        limits:\n          cpus: '2.0'\n          memory: 4G\n        reservations:\n          cpus: '1.0'\n          memory: 2G\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U ${DB_USER} -d ${DB_NAME}\"]\n      interval: 10s\n      timeout: 5s\n      retries: 5\n\n  # ==================== Redis Cluster ====================\n  redis-1:\n    image: redis:7-alpine\n    container_name: ai-conversation-redis-1\n    restart: unless-stopped\n    command: |\n      redis-server\n        --port 6379\n        --cluster-enabled yes\n        --cluster-config-file nodes-6379.conf\n        --cluster-node-timeout 5000\n        --appendonly yes\n        --requirepass ${REDIS_PASSWORD}\n        --masterauth ${REDIS_PASSWORD}\n        --maxmemory 2gb\n        --maxmemory-policy allkeys-lru\n    ports:\n      - \"6379:6379\"\n      - \"16379:16379\"\n    volumes:\n      - redis_1_data:/data\n      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro\n    networks:\n      - backend\n    deploy:\n      resources:\n        limits:\n          cpus: '2.0'\n          memory: 3G\n        reservations:\n          cpus: '1.0'\n          memory: 2G\n    healthcheck:\n      test: [\"CMD\", \"redis-cli\", \"-a\", \"${REDIS_PASSWORD}\", \"ping\"]\n      interval: 10s\n      timeout: 3s\n      retries: 5\n\n  redis-2:\n    image: redis:7-alpine\n    container_name: ai-conversation-redis-2\n    restart: unless-stopped\n    command: |\n      redis-server\n        --port 6379\n        --cluster-enabled yes\n        --cluster-config-file nodes-6379.conf\n        --cluster-node-timeout 5000\n        --appendonly yes\n        --requirepass ${REDIS_PASSWORD}\n        --masterauth ${REDIS_PASSWORD}\n        --maxmemory 2gb\n        --maxmemory-policy allkeys-lru\n    ports:\n      - \"6380:6379\"\n      - \"16380:16379\"\n    volumes:\n      - redis_2_data:/data\n      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro\n    networks:\n      - backend\n    deploy:\n      resources:\n        limits:\n          cpus: '2.0'\n          memory: 3G\n        reservations:\n          cpus: '1.0'\n          memory: 2G\n    healthcheck:\n      test: [\"CMD\", \"redis-cli\", \"-a\", \"${REDIS_PASSWORD}\", \"ping\"]\n      interval: 10s\n      timeout: 3s\n      retries: 5\n\n  redis-3:\n    image: redis:7-alpine\n    container_name: ai-conversation-redis-3\n    restart: unless-stopped\n    command: |\n      redis-server\n        --port 6379\n        --cluster-enabled yes\n        --cluster-config-file nodes-6379.conf\n        --cluster-node-timeout 5000\n        --appendonly yes\n        --requirepass ${REDIS_PASSWORD}\n        --masterauth ${REDIS_PASSWORD}\n        --maxmemory 2gb\n        --maxmemory-policy allkeys-lru\n    ports:\n      - \"6381:6379\"\n      - \"16381:16379\"\n    volumes:\n      - redis_3_data:/data\n      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro\n    networks:\n      - backend\n    deploy:\n      resources:\n        limits:\n          cpus: '2.0'\n          memory: 3G\n        reservations:\n          cpus: '1.0'\n          memory: 2G\n    healthcheck:\n      test: [\"CMD\", \"redis-cli\", \"-a\", \"${REDIS_PASSWORD}\", \"ping\"]\n      interval: 10s\n      timeout: 3s\n      retries: 5\n\n  # ==================== Monitoring Stack ====================\n  prometheus:\n    image: prom/prometheus:v2.47.0\n    container_name: ai-conversation-prometheus\n    restart: unless-stopped\n    ports:\n      - \"9090:9090\"\n    volumes:\n      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro\n      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro\n      - prometheus_data:/prometheus\n    command:\n      - '--config.file=/etc/prometheus/prometheus.yml'\n      - '--storage.tsdb.path=/prometheus'\n      - '--storage.tsdb.retention.time=30d'\n      - '--storage.tsdb.retention.size=20GB'\n      - '--web.console.libraries=/usr/share/prometheus/console_libraries'\n      - '--web.console.templates=/usr/share/prometheus/consoles'\n      - '--web.enable-lifecycle'\n      - '--web.enable-admin-api'\n    networks:\n      - monitoring\n      - backend\n    deploy:\n      resources:\n        limits:\n          cpus: '2.0'\n          memory: 4G\n        reservations:\n          cpus: '1.0'\n          memory: 2G\n    healthcheck:\n      test: [\"CMD\", \"wget\", \"--quiet\", \"--tries=1\", \"--spider\", \"http://localhost:9090/-/healthy\"]\n      interval: 30s\n      timeout: 10s\n      retries: 3\n\n  grafana:\n    image: grafana/grafana:10.1.0\n    container_name: ai-conversation-grafana\n    restart: unless-stopped\n    ports:\n      - \"3000:3000\"\n    environment:\n      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}\n      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}\n      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-worldmap-panel\n      GF_ALERTING_ENABLED: true\n      GF_UNIFIED_ALERTING_ENABLED: true\n    volumes:\n      - grafana_data:/var/lib/grafana\n      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro\n      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro\n    depends_on:\n      - prometheus\n    networks:\n      - monitoring\n      - frontend\n    deploy:\n      resources:\n        limits:\n          cpus: '1.0'\n          memory: 2G\n        reservations:\n          cpus: '0.5'\n          memory: 1G\n    healthcheck:\n      test: [\"CMD\", \"wget\", \"--quiet\", \"--tries=1\", \"--spider\", \"http://localhost:3000/api/health\"]\n      interval: 30s\n      timeout: 10s\n      retries: 3\n\n  alertmanager:\n    image: prom/alertmanager:v0.25.0\n    container_name: ai-conversation-alertmanager\n    restart: unless-stopped\n    ports:\n      - \"9093:9093\"\n    volumes:\n      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro\n      - alertmanager_data:/alertmanager\n    command:\n      - '--config.file=/etc/alertmanager/alertmanager.yml'\n      - '--storage.path=/alertmanager'\n      - '--web.external-url=http://localhost:9093'\n    networks:\n      - monitoring\n    deploy:\n      resources:\n        limits:\n          cpus: '0.5'\n          memory: 1G\n        reservations:\n          cpus: '0.25'\n          memory: 512M\n\n  node-exporter:\n    image: prom/node-exporter:v1.6.1\n    container_name: ai-conversation-node-exporter\n    restart: unless-stopped\n    ports:\n      - \"9100:9100\"\n    volumes:\n      - /proc:/host/proc:ro\n      - /sys:/host/sys:ro\n      - /:/rootfs:ro\n    command:\n      - '--path.procfs=/host/proc'\n      - '--path.sysfs=/host/sys'\n      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'\n    networks:\n      - monitoring\n    deploy:\n      resources:\n        limits:\n          cpus: '0.5'\n          memory: 512M\n        reservations:\n          cpus: '0.25'\n          memory: 256M\n\n  cadvisor:\n    image: gcr.io/cadvisor/cadvisor:v0.47.0\n    container_name: ai-conversation-cadvisor\n    restart: unless-stopped\n    ports:\n      - \"8080:8080\"\n    volumes:\n      - /:/rootfs:ro\n      - /var/run:/var/run:ro\n      - /sys:/sys:ro\n      - /var/lib/docker/:/var/lib/docker:ro\n      - /dev/disk/:/dev/disk:ro\n    privileged: true\n    devices:\n      - /dev/kmsg\n    networks:\n      - monitoring\n    deploy:\n      resources:\n        limits:\n          cpus: '1.0'\n          memory: 2G\n        reservations:\n          cpus: '0.5'\n          memory: 1G\n\n  # ==================== Log Management ====================\n  elasticsearch:\n    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0\n    container_name: ai-conversation-elasticsearch\n    restart: unless-stopped\n    environment:\n      - node.name=elasticsearch\n      - cluster.name=ai-conversation-logs\n      - discovery.type=single-node\n      - bootstrap.memory_lock=true\n      - \"ES_JAVA_OPTS=-Xms2g -Xmx2g\"\n      - xpack.security.enabled=false\n      - xpack.monitoring.collection.enabled=true\n    ulimits:\n      memlock:\n        soft: -1\n        hard: -1\n    volumes:\n      - elasticsearch_data:/usr/share/elasticsearch/data\n    ports:\n      - \"9200:9200\"\n    networks:\n      - monitoring\n    deploy:\n      resources:\n        limits:\n          cpus: '2.0'\n          memory: 4G\n        reservations:\n          cpus: '1.0'\n          memory: 2G\n    healthcheck:\n      test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:9200/_cluster/health\"]\n      interval: 30s\n      timeout: 10s\n      retries: 5\n\n  kibana:\n    image: docker.elastic.co/kibana/kibana:8.10.0\n    container_name: ai-conversation-kibana\n    restart: unless-stopped\n    environment:\n      ELASTICSEARCH_HOSTS: http://elasticsearch:9200\n      ELASTICSEARCH_USERNAME: elastic\n      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}\n    ports:\n      - \"5601:5601\"\n    depends_on:\n      elasticsearch:\n        condition: service_healthy\n    networks:\n      - monitoring\n      - frontend\n    deploy:\n      resources:\n        limits:\n          cpus: '1.0'\n          memory: 2G\n        reservations:\n          cpus: '0.5'\n          memory: 1G\n    healthcheck:\n      test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:5601/api/status\"]\n      interval: 30s\n      timeout: 10s\n      retries: 5\n\n  logstash:\n    image: docker.elastic.co/logstash/logstash:8.10.0\n    container_name: ai-conversation-logstash\n    restart: unless-stopped\n    environment:\n      LS_JAVA_OPTS: \"-Xmx1g -Xms1g\"\n    volumes:\n      - ./logging/logstash/config:/usr/share/logstash/config:ro\n      - ./logging/logstash/pipeline:/usr/share/logstash/pipeline:ro\n      - app_logs_1:/app/logs/app-1:ro\n      - app_logs_2:/app/logs/app-2:ro\n      - app_logs_worker_1:/app/logs/worker-1:ro\n      - app_logs_worker_ml_1:/app/logs/worker-ml-1:ro\n      - nginx_logs:/app/logs/nginx:ro\n    ports:\n      - \"5044:5044\"\n    depends_on:\n      elasticsearch:\n        condition: service_healthy\n    networks:\n      - monitoring\n    deploy:\n      resources:\n        limits:\n          cpus: '1.0'\n          memory: 2G\n        reservations:\n          cpus: '0.5'\n          memory: 1G\n\n# ==================== Volume Definitions ====================\nvolumes:\n  # Application volumes\n  app_models:\n    driver: local\n  app_logs_1:\n    driver: local\n  app_logs_2:\n    driver: local\n  app_logs_worker_1:\n    driver: local\n  app_logs_worker_ml_1:\n    driver: local\n  app_logs_scheduler:\n    driver: local\n  app_temp_1:\n    driver: local\n  app_temp_2:\n    driver: local\n  \n  # Database volumes\n  postgres_master_data:\n    driver: local\n  postgres_slave_data:\n    driver: local\n  \n  # Redis volumes\n  redis_1_data:\n    driver: local\n  redis_2_data:\n    driver: local\n  redis_3_data:\n    driver: local\n  \n  # Monitoring volumes\n  prometheus_data:\n    driver: local\n  grafana_data:\n    driver: local\n  alertmanager_data:\n    driver: local\n  \n  # Logging volumes\n  elasticsearch_data:\n    driver: local\n  \n  # Nginx volumes\n  nginx_logs:\n    driver: local\n\n# ==================== Network Definitions ====================\nnetworks:\n  frontend:\n    driver: bridge\n    ipam:\n      driver: default\n      config:\n        - subnet: 172.20.0.0/16\n  \n  backend:\n    driver: bridge\n    ipam:\n      driver: default\n      config:\n        - subnet: 172.21.0.0/16\n  \n  monitoring:\n    driver: bridge\n    ipam:\n      driver: default\n      config:\n        - subnet: 172.22.0.0/16

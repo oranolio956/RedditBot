@@ -1,0 +1,600 @@
+# AI Conversation System - Complete CI/CD Pipeline
+# Automated testing, building, security scanning, and deployment
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      enable_gpu:
+        description: 'Enable GPU builds'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ai-conversation-system
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==================== Code Quality and Security ====================
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better analysis
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Code formatting check (Black)
+      run: |
+        black --check --diff app tests
+
+    - name: Import sorting check (isort)
+      run: |
+        isort --check-only --diff app tests
+
+    - name: Linting (flake8)
+      run: |
+        flake8 app tests --max-line-length=88 --extend-ignore=E203,W503
+
+    - name: Type checking (mypy)
+      run: |
+        mypy app --ignore-missing-imports
+
+    - name: Security scan (bandit)
+      run: |
+        bandit -r app -f json -o security-report.json || true
+        bandit -r app
+
+    - name: Dependency vulnerability scan
+      run: |
+        pip-audit --format=json --output=dependency-vulnerabilities.json || true
+        pip-audit
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          security-report.json
+          dependency-vulnerabilities.json
+
+  # ==================== Unit and Integration Tests ====================
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_ai_conversation
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Set up test environment
+      run: |
+        cp .env.example .env.test
+        echo "TESTING=true" >> .env.test
+        echo "DB_HOST=localhost" >> .env.test
+        echo "DB_PORT=5432" >> .env.test
+        echo "DB_NAME=test_ai_conversation" >> .env.test
+        echo "DB_USER=test_user" >> .env.test
+        echo "DB_PASSWORD=test_password" >> .env.test
+        echo "REDIS_HOST=localhost" >> .env.test
+        echo "REDIS_PORT=6379" >> .env.test
+
+    - name: Run database migrations
+      run: |
+        export $(cat .env.test | xargs)
+        alembic upgrade head
+      env:
+        ENVIRONMENT: testing
+
+    - name: Run unit tests
+      run: |
+        export $(cat .env.test | xargs)
+        pytest tests/unit --cov=app --cov-report=xml --cov-report=html --junitxml=test-results-unit.xml -v
+      env:
+        ENVIRONMENT: testing
+
+    - name: Run integration tests
+      run: |
+        export $(cat .env.test | xargs)
+        pytest tests/integration --cov=app --cov-append --cov-report=xml --cov-report=html --junitxml=test-results-integration.xml -v
+      env:
+        ENVIRONMENT: testing
+
+    - name: Run API tests
+      run: |
+        export $(cat .env.test | xargs)
+        pytest tests/api --cov=app --cov-append --cov-report=xml --cov-report=html --junitxml=test-results-api.xml -v
+      env:
+        ENVIRONMENT: testing
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: |
+          test-results-*.xml
+          htmlcov/
+          coverage.xml
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  # ==================== Performance Testing ====================
+  performance-test:
+    name: Performance Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install locust pytest-benchmark
+
+    - name: Run performance benchmarks
+      run: |
+        pytest tests/performance --benchmark-json=benchmark-results.json -v
+
+    - name: Run load tests
+      run: |
+        # Start the application in background
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+        sleep 10
+        
+        # Run load tests
+        locust -f tests/load/locustfile.py --headless -u 10 -r 2 -t 60s --host http://localhost:8000 --html load-test-report.html
+
+    - name: Upload performance results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-results
+        path: |
+          benchmark-results.json
+          load-test-report.html
+
+  # ==================== Docker Build and Security Scan ====================
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [code-quality, test]
+    
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tags: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push main image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        target: production
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          GIT_COMMIT=${{ github.sha }}
+          GIT_BRANCH=${{ github.ref_name }}
+          VERSION=${{ steps.meta.outputs.version }}
+
+    - name: Build and push GPU image
+      if: github.event.inputs.enable_gpu == 'true' || github.ref == 'refs/heads/main'
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.gpu
+        target: gpu-production
+        platforms: linux/amd64
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-gpu:${{ steps.meta.outputs.version }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha,scope=gpu
+        cache-to: type=gha,mode=max,scope=gpu
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Generate SBOM
+      uses: anchore/sbom-action@v0
+      with:
+        image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+        format: spdx-json
+        output-file: sbom.spdx.json
+
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v3
+      with:
+        name: sbom
+        path: sbom.spdx.json
+
+  # ==================== Kubernetes Manifest Validation ====================
+  k8s-validation:
+    name: Kubernetes Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Validate Kubernetes manifests
+      run: |
+        for manifest in k8s/*.yaml; do
+          echo "Validating $manifest..."
+          kubectl apply --dry-run=client --validate=true -f "$manifest"
+        done
+
+    - name: Validate with kubeval
+      run: |
+        wget https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
+        tar xf kubeval-linux-amd64.tar.gz
+        chmod +x kubeval
+        ./kubeval k8s/*.yaml
+
+    - name: Security scanning with Polaris
+      run: |
+        wget https://github.com/FairwindsOps/polaris/releases/latest/download/polaris_linux_amd64.tar.gz
+        tar xzf polaris_linux_amd64.tar.gz
+        chmod +x polaris
+        ./polaris audit --audit-path k8s/ --format json > polaris-report.json || true
+
+    - name: Upload validation results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: k8s-validation
+        path: polaris-report.json
+
+  # ==================== Staging Deployment ====================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build, k8s-validation]
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://staging.ai-conversation.example.com
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.STAGING_KUBECONFIG }}
+
+    - name: Deploy to staging
+      run: |
+        # Update image tags in manifests
+        IMAGE_TAG="${{ needs.build.outputs.image-tags }}"
+        sed -i "s|ai-conversation:latest|${IMAGE_TAG}|g" k8s/deployment-production.yaml
+        
+        # Deploy
+        ./scripts/deploy.sh deploy \
+          --namespace ai-conversation-staging \
+          --image-tag "${{ github.sha }}" \
+          --environment staging
+
+    - name: Run smoke tests
+      run: |
+        # Wait for deployment to be ready
+        kubectl wait --for=condition=Available deployment/ai-conversation-app \
+          --namespace=ai-conversation-staging --timeout=600s
+        
+        # Run smoke tests
+        STAGING_URL="https://staging.ai-conversation.example.com"
+        curl -f "$STAGING_URL/health" || exit 1
+        curl -f "$STAGING_URL/ready" || exit 1
+
+    - name: Update deployment status
+      if: always()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const deployment = await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: context.payload.deployment.id,
+            state: '${{ job.status }}' === 'success' ? 'success' : 'failure',
+            environment_url: 'https://staging.ai-conversation.example.com',
+            description: 'Staging deployment ${{ job.status }}'
+          });
+
+  # ==================== Production Deployment ====================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [build, k8s-validation]
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://ai-conversation.example.com
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.PRODUCTION_KUBECONFIG }}
+
+    - name: Deploy to production
+      run: |
+        # Update image tags in manifests
+        IMAGE_TAG="${{ needs.build.outputs.image-tags }}"
+        sed -i "s|ai-conversation:latest|${IMAGE_TAG}|g" k8s/deployment-production.yaml
+        
+        # Deploy with production settings
+        ./scripts/deploy.sh deploy \
+          --namespace ai-conversation \
+          --image-tag "${{ github.sha }}" \
+          --environment production \
+          ${{ github.event.inputs.enable_gpu == 'true' && '--gpu' || '' }}
+
+    - name: Run production health checks
+      run: |
+        # Wait for deployment to be ready
+        kubectl wait --for=condition=Available deployment/ai-conversation-app \
+          --namespace=ai-conversation --timeout=600s
+        
+        # Run comprehensive health checks
+        PRODUCTION_URL="https://ai-conversation.example.com"
+        curl -f "$PRODUCTION_URL/health" || exit 1
+        curl -f "$PRODUCTION_URL/ready" || exit 1
+        
+        # Check metrics endpoint
+        kubectl port-forward service/ai-conversation-app 8001:8001 --namespace=ai-conversation &
+        sleep 5
+        curl -f "http://localhost:8001/metrics" || exit 1
+
+    - name: Notify deployment success
+      uses: actions/github-script@v6
+      if: success()
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚀 Successfully deployed to production!\n\n- Image: `${{ needs.build.outputs.image-tags }}`\n- Commit: `${{ github.sha }}`\n- Environment: https://ai-conversation.example.com'
+          })
+
+  # ==================== Post-Deployment Tests ====================
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: e2e/package-lock.json
+
+    - name: Install E2E dependencies
+      run: |
+        cd e2e
+        npm ci
+
+    - name: Run E2E tests
+      run: |
+        cd e2e
+        npm run test:headless
+      env:
+        BASE_URL: https://staging.ai-conversation.example.com
+
+    - name: Upload E2E results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: e2e-results
+        path: |
+          e2e/test-results/
+          e2e/playwright-report/
+
+  # ==================== Security Monitoring ====================
+  security-monitoring:
+    name: Security Monitoring
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.ref == 'refs/heads/main'
+    needs: [deploy-production]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run OWASP ZAP security scan
+      uses: zaproxy/action-full-scan@v0.7.0
+      with:
+        target: 'https://ai-conversation.example.com'
+        rules_file_name: '.zap/rules.tsv'
+        cmd_options: '-a'
+
+    - name: Upload ZAP scan results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: zap-scan
+        path: report_html.html
+
+  # ==================== Cleanup ====================
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [build, deploy-staging, deploy-production]
+    
+    steps:
+    - name: Clean up old images
+      uses: actions/delete-package-versions@v4
+      with:
+        package-name: ${{ env.IMAGE_NAME }}
+        package-type: container
+        min-versions-to-keep: 10
+        delete-only-untagged-versions: true
+
+    - name: Clean up artifacts
+      uses: geekyeggo/delete-artifact@v2
+      if: github.event_name == 'pull_request'
+      with:
+        name: |
+          test-results
+          security-reports
+          performance-results

@@ -1,0 +1,73 @@
+# Kubernetes ConfigMap for Telegram ML Bot
+# Non-sensitive configuration values
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegram-bot-config
+  namespace: telegram-bot
+  labels:
+    app: telegram-ml-bot
+data:
+  # Application Configuration
+  APP_NAME: "Telegram ML Bot"
+  APP_VERSION: "1.0.0"
+  API_PREFIX: "/api/v1"
+  DEBUG: "false"
+  
+  # Database Configuration (non-sensitive)
+  DB_PORT: "5432"
+  DB_NAME: "telegram_bot"
+  DB_USER: "postgres"
+  DB_POOL_SIZE: "50"
+  DB_MAX_OVERFLOW: "100"
+  DB_POOL_TIMEOUT: "30"
+  DB_POOL_RECYCLE: "3600"
+  
+  # Redis Configuration (non-sensitive)
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  REDIS_MAX_CONNECTIONS: "100"
+  REDIS_CACHE_TTL: "3600"
+  REDIS_SESSION_TTL: "86400"
+  
+  # Telegram Configuration (non-sensitive)
+  TELEGRAM_RATE_LIMIT_CALLS: "20"
+  TELEGRAM_RATE_LIMIT_PERIOD: "60"
+  TELEGRAM_PARSE_MODE: "HTML"
+  
+  # Security Configuration
+  JWT_ALGORITHM: "HS256"
+  JWT_EXPIRATION_SECONDS: "3600"
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_PER_MINUTE: "60"
+  RATE_LIMIT_PER_HOUR: "1000"
+  CORS_ORIGINS: "https://yourdomain.com,https://api.yourdomain.com"
+  
+  # ML Configuration
+  ML_DEVICE: "cpu"
+  ML_BATCH_SIZE: "32"
+  ML_MAX_SEQUENCE_LENGTH: "512"
+  ML_ENABLE_GPU: "false"
+  ML_MODEL_CACHE_SIZE: "3"
+  ML_SENTIMENT_MODEL: "cardiffnlp/twitter-roberta-base-sentiment-latest"
+  ML_EMBEDDING_MODEL: "sentence-transformers/all-MiniLM-L6-v2"
+  
+  # Celery Configuration
+  CELERY_WORKER_CONCURRENCY: "4"
+  CELERY_TASK_TIME_LIMIT: "300"
+  CELERY_TASK_SOFT_TIME_LIMIT: "240"
+  CELERY_DEFAULT_QUEUE: "default"
+  CELERY_ML_QUEUE: "ml_tasks"
+  CELERY_TASK_MAX_RETRIES: "3"
+  CELERY_TASK_RETRY_DELAY: "60"
+  
+  # Logging Configuration
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  
+  # Monitoring Configuration
+  SENTRY_ENVIRONMENT: "production"
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "8001"
+  HEALTH_CHECK_INTERVAL: "30"

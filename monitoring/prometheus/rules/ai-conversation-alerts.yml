@@ -1,0 +1,327 @@
+# Prometheus Alert Rules for AI Conversation System
+# Production-ready alerting rules with proper thresholds
+
+groups:
+# ==================== Application Health Alerts ====================
+- name: ai-conversation-health
+  rules:
+  - alert: AIConversationAppDown
+    expr: up{job="ai-conversation-app"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      component: application
+      service: ai-conversation
+    annotations:
+      summary: "AI Conversation application is down"
+      description: "AI Conversation application instance {{ $labels.instance }} has been down for more than 1 minute."
+      runbook_url: "https://docs.example.com/runbooks/app-down"
+
+  - alert: AIConversationAppHighErrorRate
+    expr: rate(http_requests_total{job="ai-conversation-app",status=~"5.."}[5m]) / rate(http_requests_total{job="ai-conversation-app"}[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+      component: application
+      service: ai-conversation
+    annotations:
+      summary: "High error rate in AI Conversation application"
+      description: "AI Conversation application {{ $labels.instance }} has error rate of {{ $value | humanizePercentage }} for more than 5 minutes."
+      runbook_url: "https://docs.example.com/runbooks/high-error-rate"
+
+  - alert: AIConversationAppHighLatency
+    expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="ai-conversation-app"}[5m])) > 1
+    for: 10m
+    labels:
+      severity: warning
+      component: application
+      service: ai-conversation
+    annotations:
+      summary: "High latency in AI Conversation application"
+      description: "AI Conversation application {{ $labels.instance }} has 95th percentile latency of {{ $value }}s for more than 10 minutes."
+      runbook_url: "https://docs.example.com/runbooks/high-latency"
+
+  - alert: AIConversationWebhookFailures
+    expr: rate(telegram_webhook_errors_total[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: critical
+      component: webhook
+      service: telegram
+    annotations:
+      summary: "High Telegram webhook failure rate"
+      description: "Telegram webhook failures are occurring at {{ $value }} per second for more than 5 minutes."
+      runbook_url: "https://docs.example.com/runbooks/webhook-failures"
+
+# ==================== Worker Health Alerts ====================
+- name: ai-conversation-workers
+  rules:
+  - alert: CeleryWorkerDown
+    expr: up{job="ai-conversation-workers"} == 0
+    for: 2m
+    labels:
+      severity: warning
+      component: worker
+      service: celery
+    annotations:
+      summary: "Celery worker is down"
+      description: "Celery worker {{ $labels.instance }} has been down for more than 2 minutes."
+      runbook_url: "https://docs.example.com/runbooks/worker-down"
+
+  - alert: CeleryQueueBacklog
+    expr: celery_queue_length > 100
+    for: 10m
+    labels:
+      severity: warning
+      component: worker
+      service: celery
+    annotations:
+      summary: "High Celery queue backlog"
+      description: "Celery queue {{ $labels.queue }} has {{ $value }} tasks waiting for more than 10 minutes."
+      runbook_url: "https://docs.example.com/runbooks/queue-backlog"
+
+  - alert: MLWorkerHighMemoryUsage
+    expr: container_memory_usage_bytes{container="worker-ml"} / container_spec_memory_limit_bytes{container="worker-ml"} > 0.9
+    for: 15m
+    labels:
+      severity: warning
+      component: ml-worker
+      service: machine-learning
+    annotations:
+      summary: "High memory usage in ML worker"
+      description: "ML worker {{ $labels.pod }} is using {{ $value | humanizePercentage }} of its memory limit for more than 15 minutes."
+      runbook_url: "https://docs.example.com/runbooks/high-memory"
+
+# ==================== Database Alerts ====================
+- name: postgresql-alerts
+  rules:
+  - alert: PostgreSQLDown
+    expr: pg_up == 0
+    for: 1m
+    labels:
+      severity: critical
+      component: database
+      service: postgresql
+    annotations:
+      summary: "PostgreSQL is down"
+      description: "PostgreSQL instance {{ $labels.instance }} is down for more than 1 minute."
+      runbook_url: "https://docs.example.com/runbooks/postgres-down"
+
+  - alert: PostgreSQLHighConnections
+    expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+    for: 5m
+    labels:
+      severity: warning
+      component: database
+      service: postgresql
+    annotations:
+      summary: "PostgreSQL high connection usage"
+      description: "PostgreSQL {{ $labels.instance }} is using {{ $value | humanizePercentage }} of max connections for more than 5 minutes."
+      runbook_url: "https://docs.example.com/runbooks/postgres-connections"
+
+  - alert: PostgreSQLSlowQueries
+    expr: rate(pg_stat_database_temp_files_total[5m]) > 0.1
+    for: 10m
+    labels:
+      severity: warning
+      component: database
+      service: postgresql
+    annotations:
+      summary: "PostgreSQL slow queries detected"
+      description: "PostgreSQL {{ $labels.instance }} has {{ $value }} slow queries per second for more than 10 minutes."
+      runbook_url: "https://docs.example.com/runbooks/postgres-slow-queries"
+
+  - alert: PostgreSQLReplicationLag
+    expr: pg_replication_lag > 30
+    for: 5m
+    labels:
+      severity: warning
+      component: database
+      service: postgresql
+    annotations:
+      summary: "PostgreSQL replication lag"
+      description: "PostgreSQL replication lag is {{ $value }} seconds for more than 5 minutes."
+      runbook_url: "https://docs.example.com/runbooks/postgres-replication-lag"
+
+# ==================== Redis Alerts ====================
+- name: redis-alerts
+  rules:
+  - alert: RedisDown
+    expr: redis_up == 0
+    for: 1m
+    labels:
+      severity: critical
+      component: cache
+      service: redis
+    annotations:
+      summary: "Redis is down"
+      description: "Redis instance {{ $labels.instance }} is down for more than 1 minute."
+      runbook_url: "https://docs.example.com/runbooks/redis-down"
+
+  - alert: RedisHighMemoryUsage
+    expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+    for: 5m
+    labels:
+      severity: warning
+      component: cache
+      service: redis
+    annotations:
+      summary: "Redis high memory usage"
+      description: "Redis {{ $labels.instance }} is using {{ $value | humanizePercentage }} of max memory for more than 5 minutes."
+      runbook_url: "https://docs.example.com/runbooks/redis-memory"
+
+  - alert: RedisClusterNodeDown
+    expr: redis_cluster_nodes{role="master",state!="ok"} > 0
+    for: 1m
+    labels:
+      severity: critical
+      component: cache
+      service: redis
+    annotations:
+      summary: "Redis cluster node is down"
+      description: "Redis cluster has {{ $value }} master nodes in non-ok state."
+      runbook_url: "https://docs.example.com/runbooks/redis-cluster-down"
+
+# ==================== Resource Usage Alerts ====================
+- name: resource-alerts
+  rules:
+  - alert: HighCPUUsage
+    expr: 100 - (avg(irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+    for: 15m
+    labels:
+      severity: warning
+      component: infrastructure
+      service: kubernetes
+    annotations:
+      summary: "High CPU usage on node"
+      description: "Node {{ $labels.instance }} has CPU usage of {{ $value }}% for more than 15 minutes."
+      runbook_url: "https://docs.example.com/runbooks/high-cpu"
+
+  - alert: HighMemoryUsage
+    expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+    for: 15m
+    labels:
+      severity: warning
+      component: infrastructure
+      service: kubernetes
+    annotations:
+      summary: "High memory usage on node"
+      description: "Node {{ $labels.instance }} has memory usage of {{ $value | humanizePercentage }} for more than 15 minutes."
+      runbook_url: "https://docs.example.com/runbooks/high-memory"
+
+  - alert: DiskSpaceLow
+    expr: (node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes > 0.85
+    for: 10m
+    labels:
+      severity: warning
+      component: infrastructure
+      service: kubernetes
+    annotations:
+      summary: "Low disk space"
+      description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has {{ $value | humanizePercentage }} usage for more than 10 minutes."
+      runbook_url: "https://docs.example.com/runbooks/low-disk-space"
+
+# ==================== Kubernetes Alerts ====================
+- name: kubernetes-alerts
+  rules:
+  - alert: PodCrashLooping
+    expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+    for: 5m
+    labels:
+      severity: warning
+      component: kubernetes
+      service: kubernetes
+    annotations:
+      summary: "Pod is crash looping"
+      description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is restarting {{ $value | humanize }} times per second."
+      runbook_url: "https://docs.example.com/runbooks/pod-crash-looping"
+
+  - alert: PodNotReady
+    expr: kube_pod_status_ready{condition="false"} == 1
+    for: 10m
+    labels:
+      severity: warning
+      component: kubernetes
+      service: kubernetes
+    annotations:
+      summary: "Pod is not ready"
+      description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in not-ready state for more than 10 minutes."
+      runbook_url: "https://docs.example.com/runbooks/pod-not-ready"
+
+  - alert: DeploymentReplicasMismatch
+    expr: kube_deployment_status_replicas_available != kube_deployment_spec_replicas
+    for: 5m
+    labels:
+      severity: warning
+      component: kubernetes
+      service: kubernetes
+    annotations:
+      summary: "Deployment replicas mismatch"
+      description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $labels.available }} available replicas but {{ $labels.desired }} desired."
+      runbook_url: "https://docs.example.com/runbooks/deployment-replicas-mismatch"
+
+# ==================== GPU Alerts (if GPU nodes exist) ====================
+- name: gpu-alerts
+  rules:
+  - alert: GPUHighUtilization
+    expr: nvidia_smi_utilization_gpu > 95
+    for: 30m
+    labels:
+      severity: warning
+      component: gpu
+      service: machine-learning
+    annotations:
+      summary: "High GPU utilization"
+      description: "GPU {{ $labels.gpu }} on {{ $labels.instance }} has {{ $value }}% utilization for more than 30 minutes."
+      runbook_url: "https://docs.example.com/runbooks/high-gpu-utilization"
+
+  - alert: GPUMemoryHigh
+    expr: nvidia_smi_memory_used / nvidia_smi_memory_total > 0.9
+    for: 15m
+    labels:
+      severity: warning
+      component: gpu
+      service: machine-learning
+    annotations:
+      summary: "High GPU memory usage"
+      description: "GPU {{ $labels.gpu }} on {{ $labels.instance }} has {{ $value | humanizePercentage }} memory usage for more than 15 minutes."
+      runbook_url: "https://docs.example.com/runbooks/high-gpu-memory"
+
+# ==================== Business Logic Alerts ====================
+- name: business-alerts
+  rules:
+  - alert: TypingSimulationFailures
+    expr: rate(typing_simulation_errors_total[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+      component: typing-system
+      service: ai-conversation
+    annotations:
+      summary: "High typing simulation failure rate"
+      description: "Typing simulation failures are occurring at {{ $value }} per second for more than 5 minutes."
+      runbook_url: "https://docs.example.com/runbooks/typing-simulation-failures"
+
+  - alert: PersonalitySystemDown
+    expr: personality_system_health == 0
+    for: 2m
+    labels:
+      severity: warning
+      component: personality-system
+      service: ai-conversation
+    annotations:
+      summary: "Personality system is unhealthy"
+      description: "Personality system health check has been failing for more than 2 minutes."
+      runbook_url: "https://docs.example.com/runbooks/personality-system-down"
+
+  - alert: ConversationContextErrors
+    expr: rate(conversation_context_errors_total[5m]) > 0.05
+    for: 10m
+    labels:
+      severity: warning
+      component: context-system
+      service: ai-conversation
+    annotations:
+      summary: "High conversation context error rate"
+      description: "Conversation context errors are occurring at {{ $value }} per second for more than 10 minutes."
+      runbook_url: "https://docs.example.com/runbooks/context-errors"

@@ -1,0 +1,586 @@
+# Kubernetes StatefulSets for AI Conversation System
+# For stateful services requiring persistent storage and stable network identities
+
+# ==================== PostgreSQL Master StatefulSet ====================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-master
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: postgres-master
+    version: v15.4
+spec:
+  serviceName: postgres-master-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: postgres-master
+  template:
+    metadata:
+      labels:
+        app: ai-conversation-system
+        component: postgres-master
+        version: v15.4
+    spec:
+      serviceAccountName: ai-conversation-sa
+      securityContext:
+        runAsUser: 999  # postgres user
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: "Always"
+      initContainers:
+      - name: postgres-init
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Initializing PostgreSQL data directory..."
+          if [ -d /var/lib/postgresql/data/pgdata ]; then
+            echo "Data directory already exists, skipping initialization"
+          else
+            echo "Creating data directory..."
+            mkdir -p /var/lib/postgresql/data/pgdata
+            chown -R 999:999 /var/lib/postgresql/data
+          fi
+        volumeMounts:
+        - name: postgres-master-storage
+          mountPath: /var/lib/postgresql/data
+        securityContext:
+          runAsUser: 0  # Need root for initialization
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: ai-conversation-config
+              key: DB_NAME
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_PASSWORD
+        - name: POSTGRES_REPLICATION_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_REPLICATION_USER
+        - name: POSTGRES_REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_REPLICATION_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_INITDB_ARGS
+          value: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+            ephemeral-storage: "1Gi"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+            ephemeral-storage: "2Gi"
+        volumeMounts:
+        - name: postgres-master-storage
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-config
+          mountPath: /etc/postgresql/postgresql.conf
+          subPath: postgresql.conf
+          readOnly: true
+        - name: postgres-config
+          mountPath: /etc/postgresql/pg_hba.conf
+          subPath: pg_hba.conf
+          readOnly: true
+        - name: postgres-init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+        command:
+        - postgres
+        - -c
+        - config_file=/etc/postgresql/postgresql.conf
+        - -c
+        - hba_file=/etc/postgresql/pg_hba.conf
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - $(POSTGRES_USER)
+            - -d
+            - $(POSTGRES_DB)
+            - -h
+            - 127.0.0.1
+            - -p
+            - "5432"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - $(POSTGRES_USER)
+            - -d
+            - $(POSTGRES_DB)
+            - -h
+            - 127.0.0.1
+            - -p
+            - "5432"
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: postgres-config
+        configMap:
+          name: postgres-config
+      - name: postgres-init-scripts
+        configMap:
+          name: postgres-init-scripts
+      nodeSelector:
+        kubernetes.io/os: linux
+        node-type: database
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: component
+                operator: In
+                values:
+                - postgres-slave
+            topologyKey: kubernetes.io/hostname
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-master-storage
+      labels:
+        app: ai-conversation-system
+        component: postgres-master
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 100Gi
+
+---
+# ==================== PostgreSQL Slave StatefulSet ====================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-slave
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: postgres-slave
+    version: v15.4
+spec:
+  serviceName: postgres-slave-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: postgres-slave
+  template:
+    metadata:
+      labels:
+        app: ai-conversation-system
+        component: postgres-slave
+        version: v15.4
+    spec:
+      serviceAccountName: ai-conversation-sa
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: "Always"
+      initContainers:
+      - name: postgres-replica-init
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_REPLICATION_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_REPLICATION_USER
+        - name: POSTGRES_REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_REPLICATION_PASSWORD
+        - name: POSTGRES_MASTER_SERVICE
+          value: postgres-master-service
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Setting up PostgreSQL replica..."
+          if [ -d "$PGDATA" ] && [ "$(ls -A $PGDATA)" ]; then
+            echo "Data directory already exists and is not empty, skipping replica setup"
+          else
+            echo "Creating base backup from master..."
+            mkdir -p $PGDATA
+            chmod 700 $PGDATA
+            PGPASSWORD="$POSTGRES_REPLICATION_PASSWORD" pg_basebackup \
+              -h $POSTGRES_MASTER_SERVICE \
+              -D $PGDATA \
+              -U $POSTGRES_REPLICATION_USER \
+              -R \
+              -W \
+              -v
+            chown -R 999:999 $PGDATA
+          fi
+        volumeMounts:
+        - name: postgres-slave-storage
+          mountPath: /var/lib/postgresql/data
+        securityContext:
+          runAsUser: 0
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
+            ephemeral-storage: "1Gi"
+          limits:
+            memory: "4Gi"
+            cpu: "1000m"
+            ephemeral-storage: "2Gi"
+        volumeMounts:
+        - name: postgres-slave-storage
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - $(POSTGRES_USER)
+            - -h
+            - 127.0.0.1
+            - -p
+            - "5432"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - $(POSTGRES_USER)
+            - -h
+            - 127.0.0.1
+            - -p
+            - "5432"
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      nodeSelector:
+        kubernetes.io/os: linux
+        node-type: database
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: component
+                operator: In
+                values:
+                - postgres-master
+            topologyKey: kubernetes.io/hostname
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-slave-storage
+      labels:
+        app: ai-conversation-system
+        component: postgres-slave
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 100Gi
+
+---
+# ==================== Redis Cluster StatefulSet ====================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: redis
+    version: v7.2
+spec:
+  serviceName: redis-headless
+  replicas: 6  # 3 masters + 3 slaves for Redis cluster
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: ai-conversation-system
+        component: redis
+        version: v7.2
+    spec:
+      serviceAccountName: ai-conversation-sa
+      securityContext:
+        runAsUser: 999  # redis user
+        runAsGroup: 999
+        fsGroup: 999
+      initContainers:
+      - name: redis-init
+        image: redis:7-alpine
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Preparing Redis configuration..."
+          cp /tmp/redis.conf /etc/redis/redis.conf
+          
+          # Set pod-specific configurations
+          POD_IP=$(hostname -i)
+          sed -i "s/\${POD_IP}/${POD_IP}/g" /etc/redis/redis.conf
+          
+          # Set Redis password
+          if [ -n "$REDIS_PASSWORD" ]; then
+            echo "requirepass $REDIS_PASSWORD" >> /etc/redis/redis.conf
+            echo "masterauth $REDIS_PASSWORD" >> /etc/redis/redis.conf
+          fi
+          
+          # Ensure data directory exists
+          mkdir -p /data
+          chown -R 999:999 /data /etc/redis
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: REDIS_PASSWORD
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: redis-config
+          mountPath: /tmp/redis.conf
+          subPath: redis.conf
+        - name: redis-storage
+          mountPath: /data
+        - name: redis-config-writable
+          mountPath: /etc/redis
+        securityContext:
+          runAsUser: 0
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: REDIS_PASSWORD
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        ports:
+        - name: redis
+          containerPort: 6379
+          protocol: TCP
+        - name: redis-bus
+          containerPort: 16379
+          protocol: TCP
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+            ephemeral-storage: "512Mi"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+            ephemeral-storage: "1Gi"
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        - name: redis-config-writable
+          mountPath: /etc/redis
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+      - name: redis-config-writable
+        emptyDir: {}
+      nodeSelector:
+        kubernetes.io/os: linux
+        node-type: cache
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - ai-conversation-system
+                - key: component
+                  operator: In
+                  values:
+                  - redis
+              topologyKey: kubernetes.io/hostname
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-storage
+      labels:
+        app: ai-conversation-system
+        component: redis
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 20Gi
+
+---
+# ==================== ConfigMap for PostgreSQL Init Scripts ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: postgres
+data:
+  01-create-replication-user.sql: |
+    -- Create replication user
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'replicator') THEN
+            CREATE USER replicator WITH REPLICATION LOGIN ENCRYPTED PASSWORD :'POSTGRES_REPLICATION_PASSWORD';
+        END IF;
+    END
+    $$;
+  
+  02-create-databases.sql: |
+    -- Create additional databases if needed
+    SELECT 'CREATE DATABASE ai_conversation_test'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ai_conversation_test')\gexec
+  
+  03-create-extensions.sql: |
+    -- Create useful extensions
+    \c ai_conversation
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+    CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+    CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+    CREATE EXTENSION IF NOT EXISTS "btree_gin";
+  
+  04-performance-tuning.sql: |
+    -- Performance tuning settings
+    \c ai_conversation
+    
+    -- Create indexes for common queries
+    -- Note: These should be created by your application migrations
+    -- This is just an example of what might be useful
+    
+    -- Ensure we have proper monitoring
+    SELECT pg_stat_statements_reset();

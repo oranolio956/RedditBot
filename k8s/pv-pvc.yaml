@@ -1,0 +1,386 @@
+# Kubernetes Persistent Volumes and Claims for AI Conversation System
+# Production-ready storage configurations with different storage classes
+
+# ==================== Storage Classes ====================
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  fsType: ext4
+  encrypted: "true"
+  iops: "3000"
+  throughput: "125"
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard-ssd
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  fsType: ext4
+  encrypted: "true"
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: logs-storage
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp2
+  fsType: ext4
+  encrypted: "true"
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+
+---
+# ==================== Persistent Volume Claims ====================
+# ML Models Storage (Shared across ML workers)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: models-pvc
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: storage
+    data-type: models
+spec:
+  accessModes:
+  - ReadWriteMany  # Allow multiple pods to read
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 50Gi
+  selector:
+    matchLabels:
+      type: models
+
+---
+# Application Logs Storage - Instance 1
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-logs-pvc
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: storage
+    data-type: logs
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: logs-storage
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# Worker Logs Storage - General Workers
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: worker-logs-pvc
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: storage
+    data-type: worker-logs
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: logs-storage
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Worker Logs Storage - ML Workers
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: worker-ml-logs-pvc
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: storage
+    data-type: ml-logs
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: logs-storage
+  resources:
+    requests:
+      storage: 15Gi
+
+---
+# Worker Logs Storage - GPU ML Workers
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: worker-ml-gpu-logs-pvc
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: storage
+    data-type: gpu-logs
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: logs-storage
+  resources:
+    requests:
+      storage: 15Gi
+
+---
+# Scheduler Logs Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scheduler-logs-pvc
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: storage
+    data-type: scheduler-logs
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: logs-storage
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# ==================== Monitoring Storage ====================
+# Prometheus Data Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: ai-conversation-monitoring
+  labels:
+    app: prometheus
+    component: monitoring
+    data-type: metrics
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+# Grafana Data Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: ai-conversation-monitoring
+  labels:
+    app: grafana
+    component: monitoring
+    data-type: dashboards
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard-ssd
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# AlertManager Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-pvc
+  namespace: ai-conversation-monitoring
+  labels:
+    app: alertmanager
+    component: monitoring
+    data-type: alerts
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard-ssd
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Elasticsearch Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: elasticsearch-pvc
+  namespace: ai-conversation-monitoring
+  labels:
+    app: elasticsearch
+    component: logging
+    data-type: logs
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 200Gi
+
+---
+# ==================== Persistent Volumes (if needed for static provisioning) ====================
+# ML Models Static Volume (if using NFS or static provisioning)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: models-pv
+  labels:
+    type: models
+    app: ai-conversation-system
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+  - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: fast-ssd
+  mountOptions:
+  - hard
+  - nfsvers=4.1
+  nfs:
+    server: your-nfs-server.example.com
+    path: /exports/ai-conversation/models
+
+---
+# ==================== Volume Snapshots (for backup) ====================
+# VolumeSnapshotClass for backup snapshots
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: ai-conversation-snapshots
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+driver: ebs.csi.aws.com
+deletionPolicy: Retain
+parameters:
+  encrypted: "true"
+
+---
+# Database Backup Snapshot (example - run on schedule)
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: postgres-master-snapshot-initial
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: backup
+spec:
+  volumeSnapshotClassName: ai-conversation-snapshots
+  source:
+    persistentVolumeClaimName: postgres-master-storage-postgres-master-0
+
+---
+# ==================== Backup Configuration ====================
+# ConfigMap for backup scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-scripts
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: backup
+data:
+  backup-database.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Database backup script
+    BACKUP_DIR="/backups/database"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="${BACKUP_DIR}/postgres_backup_${TIMESTAMP}.sql"
+    
+    # Create backup directory
+    mkdir -p $BACKUP_DIR
+    
+    # Create database backup
+    pg_dump -h $DB_HOST -U $DB_USER -d $DB_NAME > $BACKUP_FILE
+    
+    # Compress backup
+    gzip $BACKUP_FILE
+    
+    # Upload to S3 (if configured)
+    if [ -n "$AWS_S3_BACKUP_BUCKET" ]; then
+        aws s3 cp ${BACKUP_FILE}.gz s3://${AWS_S3_BACKUP_BUCKET}/database/
+    fi
+    
+    # Clean up old backups (keep last 7 days)
+    find $BACKUP_DIR -name "*.gz" -mtime +7 -delete
+    
+    echo "Backup completed: ${BACKUP_FILE}.gz"
+  
+  backup-redis.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Redis backup script
+    BACKUP_DIR="/backups/redis"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    
+    mkdir -p $BACKUP_DIR
+    
+    # Create Redis backup
+    redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASSWORD --rdb ${BACKUP_DIR}/redis_backup_${TIMESTAMP}.rdb
+    
+    # Compress backup
+    gzip ${BACKUP_DIR}/redis_backup_${TIMESTAMP}.rdb
+    
+    # Upload to S3 (if configured)
+    if [ -n "$AWS_S3_BACKUP_BUCKET" ]; then
+        aws s3 cp ${BACKUP_DIR}/redis_backup_${TIMESTAMP}.rdb.gz s3://${AWS_S3_BACKUP_BUCKET}/redis/
+    fi
+    
+    # Clean up old backups
+    find $BACKUP_DIR -name "*.gz" -mtime +3 -delete
+    
+    echo "Redis backup completed"
+  
+  restore-database.sh: |
+    #!/bin/bash
+    set -e
+    
+    if [ $# -eq 0 ]; then
+        echo "Usage: $0 <backup_file>"
+        exit 1
+    fi
+    
+    BACKUP_FILE=$1
+    
+    # Restore database from backup
+    if [[ $BACKUP_FILE == *.gz ]]; then
+        gunzip -c $BACKUP_FILE | psql -h $DB_HOST -U $DB_USER -d $DB_NAME
+    else
+        psql -h $DB_HOST -U $DB_USER -d $DB_NAME < $BACKUP_FILE
+    fi
+    
+    echo "Database restore completed"

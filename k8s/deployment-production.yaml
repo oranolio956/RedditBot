@@ -1,0 +1,832 @@
+# Kubernetes Deployment Configurations for AI Conversation System
+# Production-ready deployments with scaling, monitoring, and high availability
+
+# ==================== Main Application Deployment ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-conversation-app
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: web
+    version: v1.0.0
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/description: "AI Conversation System - Main Application"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: web
+  template:
+    metadata:
+      labels:
+        app: ai-conversation-system
+        component: web
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: ai-conversation-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: ai-conversation
+        image: ai-conversation:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: metrics
+          containerPort: 8001
+          protocol: TCP
+        env:
+        # Environment-specific configurations
+        - name: ENVIRONMENT
+          value: "production"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        
+        # Database configuration
+        - name: DB_HOST
+          value: postgres-master-service
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_PASSWORD
+              
+        # Redis configuration
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: REDIS_PASSWORD
+              
+        # Telegram Bot configuration
+        - name: TELEGRAM_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: TELEGRAM_BOT_TOKEN
+        - name: TELEGRAM_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: TELEGRAM_WEBHOOK_SECRET
+              
+        # Security configuration
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: SECRET_KEY
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: JWT_SECRET_KEY
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: ENCRYPTION_KEY
+              
+        # Monitoring configuration
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: SENTRY_DSN
+              optional: true
+        
+        # All other configuration from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: ai-conversation-config
+            
+        # Resource management
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+            ephemeral-storage: "1Gi"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+            ephemeral-storage: "2Gi"
+            
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+          
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+          
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+          successThreshold: 1
+          
+        # Volume mounts
+        volumeMounts:
+        - name: models
+          mountPath: /app/models
+          readOnly: true
+        - name: logs
+          mountPath: /app/logs
+          readOnly: false
+        - name: temp
+          mountPath: /app/temp
+          readOnly: false
+        - name: static
+          mountPath: /app/static
+          readOnly: false
+          
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          capabilities:
+            drop:
+            - ALL
+            
+      # Image pull secrets
+      imagePullSecrets:
+      - name: registry-credentials
+      
+      # Volumes
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: models-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: app-logs-pvc
+      - name: temp
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: static
+        emptyDir:
+          sizeLimit: 512Mi
+          
+      # Node selection and scheduling
+      nodeSelector:
+        kubernetes.io/os: linux
+        node-type: compute
+        
+      # Pod anti-affinity for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - ai-conversation-system
+                - key: component
+                  operator: In
+                  values:
+                  - web
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 50
+            preference:
+              matchExpressions:
+              - key: node-type
+                operator: In
+                values:
+                - compute
+              
+      # Termination settings
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+
+---
+# ==================== Worker Deployments ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-conversation-worker-general
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: worker-general
+    version: v1.0.0
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: worker-general
+  template:
+    metadata:
+      labels:
+        app: ai-conversation-system
+        component: worker-general
+        version: v1.0.0
+    spec:
+      serviceAccountName: ai-conversation-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: worker
+        image: ai-conversation:latest
+        imagePullPolicy: Always
+        command: ["celery"]
+        args: ["-A", "app.worker", "worker", "--loglevel=warning", "--concurrency=4", "--prefetch-multiplier=1", "--queue=general,default"]
+        env:
+        - name: WORKER_TYPE
+          value: "general"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: REDIS_PASSWORD
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: SENTRY_DSN
+              optional: true
+        envFrom:
+        - configMapRef:
+            name: ai-conversation-config
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      imagePullSecrets:
+      - name: registry-credentials
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: worker-logs-pvc
+      nodeSelector:
+        kubernetes.io/os: linux
+        node-type: worker
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-conversation-worker-ml
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: worker-ml
+    version: v1.0.0
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: worker-ml
+  template:
+    metadata:
+      labels:
+        app: ai-conversation-system
+        component: worker-ml
+        version: v1.0.0
+    spec:
+      serviceAccountName: ai-conversation-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: worker-ml
+        image: ai-conversation:latest
+        imagePullPolicy: Always
+        command: ["celery"]
+        args: ["-A", "app.worker", "worker", "--loglevel=warning", "--concurrency=2", "--prefetch-multiplier=1", "--queue=ml_tasks"]
+        env:
+        - name: WORKER_TYPE
+          value: "ml"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: REDIS_PASSWORD
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: SENTRY_DSN
+              optional: true
+        envFrom:
+        - configMapRef:
+            name: ai-conversation-config
+        resources:
+          requests:
+            memory: "3Gi"
+            cpu: "2000m"
+          limits:
+            memory: "6Gi"
+            cpu: "3000m"
+        volumeMounts:
+        - name: models
+          mountPath: /app/models
+          readOnly: true
+        - name: logs
+          mountPath: /app/logs
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      imagePullSecrets:
+      - name: registry-credentials
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: models-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: worker-ml-logs-pvc
+      nodeSelector:
+        kubernetes.io/os: linux
+        node-type: ml
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-type
+                operator: In
+                values:
+                - ml
+                - compute
+
+---
+# ==================== Scheduler Deployment ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-conversation-scheduler
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: scheduler
+    version: v1.0.0
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: scheduler
+  template:
+    metadata:
+      labels:
+        app: ai-conversation-system
+        component: scheduler
+        version: v1.0.0
+    spec:
+      serviceAccountName: ai-conversation-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: scheduler
+        image: ai-conversation:latest
+        imagePullPolicy: Always
+        command: ["celery"]
+        args: ["-A", "app.worker", "beat", "--loglevel=warning"]
+        env:
+        - name: WORKER_TYPE
+          value: "scheduler"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: REDIS_PASSWORD
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: SENTRY_DSN
+              optional: true
+        envFrom:
+        - configMapRef:
+            name: ai-conversation-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      imagePullSecrets:
+      - name: registry-credentials
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: scheduler-logs-pvc
+      nodeSelector:
+        kubernetes.io/os: linux
+
+---
+# ==================== GPU-Enabled Deployments ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-conversation-worker-ml-gpu
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: worker-ml-gpu
+    version: v1.0.0
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: worker-ml-gpu
+  template:
+    metadata:
+      labels:
+        app: ai-conversation-system
+        component: worker-ml-gpu
+        version: v1.0.0
+    spec:
+      serviceAccountName: ai-conversation-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: worker-ml-gpu
+        image: ai-conversation-gpu:latest
+        imagePullPolicy: Always
+        command: ["celery"]
+        args: ["-A", "app.worker", "worker", "--loglevel=warning", "--concurrency=1", "--prefetch-multiplier=1", "--queue=ml_gpu_tasks"]
+        env:
+        - name: WORKER_TYPE
+          value: "ml_gpu"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: DB_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: REDIS_PASSWORD
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: ai-conversation-secrets
+              key: SENTRY_DSN
+              optional: true
+        envFrom:
+        - configMapRef:
+            name: ai-conversation-config
+        - configMapRef:
+            name: ai-conversation-gpu-config
+        resources:
+          requests:
+            memory: "6Gi"
+            cpu: "2000m"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "12Gi"
+            cpu: "4000m"
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: models
+          mountPath: /app/models
+          readOnly: true
+        - name: logs
+          mountPath: /app/logs
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+      imagePullSecrets:
+      - name: registry-credentials
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: models-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: worker-ml-gpu-logs-pvc
+      nodeSelector:
+        kubernetes.io/os: linux
+        accelerator: nvidia-tesla-v100  # or appropriate GPU type
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+
+---
+# ==================== Horizontal Pod Autoscalers ====================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-conversation-app-hpa
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: web
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-conversation-app
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "1000"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-conversation-worker-general-hpa
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: worker-general
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-conversation-worker-general
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 180
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+
+---
+# ==================== Pod Disruption Budgets ====================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-conversation-app-pdb
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: web
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: web
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-conversation-worker-pdb
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: worker-general
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ai-conversation-system
+      component: worker-general

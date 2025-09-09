@@ -1,0 +1,214 @@
+# GPU-optimized Dockerfile for AI Conversation System
+# For CUDA-enabled ML inference and training
+
+# ==================== GPU Build Stage ====================
+FROM nvidia/cuda:12.1-devel-ubuntu22.04 as gpu-builder
+
+# Prevent interactive installations
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python and build dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3.11-venv \
+    python3-pip \
+    # Build essentials
+    build-essential \
+    gcc \
+    g++ \
+    cmake \
+    pkg-config \
+    # ML library dependencies
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    libhdf5-dev \
+    # CUDA libraries
+    libcublas-dev-12-1 \
+    libcurand-dev-12-1 \
+    libcusolver-dev-12-1 \
+    libcusparse-dev-12-1 \
+    libcufft-dev-12-1 \
+    # Database and networking
+    libpq-dev \
+    libssl-dev \
+    libffi-dev \
+    libcurl4-openssl-dev \
+    # Git for package installation
+    git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Create symlinks for Python
+RUN ln -s /usr/bin/python3.11 /usr/bin/python && \
+    ln -s /usr/bin/python3.11 /usr/bin/python3
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip and essential tools
+RUN pip install --no-cache-dir --upgrade \
+    pip==23.3.1 \
+    wheel==0.41.2 \
+    setuptools==68.2.2
+
+# Copy requirements
+COPY requirements.txt requirements-dev.txt ./
+
+# Install PyTorch with CUDA support
+RUN pip install --no-cache-dir \
+    torch==2.1.1 \
+    torchvision==0.16.1 \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# Install remaining dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ==================== GPU Production Stage ====================
+FROM nvidia/cuda:12.1-runtime-ubuntu22.04 as gpu-production
+
+# Security labels
+LABEL maintainer="AI Conversation System" \
+      version="1.0.0-gpu" \
+      description="GPU-enabled AI conversation system" \
+      security.scan="enabled" \
+      cuda.version="12.1"
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    # GPU optimization
+    CUDA_VISIBLE_DEVICES=all \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    # Performance optimization
+    PYTHONHASHSEED=random \
+    PYTHONPATH=/app \
+    # Production settings
+    ENVIRONMENT=production \
+    ML_DEVICE=cuda
+
+# Install Python and runtime dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-venv \
+    # Runtime libraries
+    libpq5 \
+    libgomp1 \
+    libopenblas0 \
+    libhdf5-103 \
+    # CUDA runtime libraries
+    libcublas-12-1 \
+    libcurand-10-12-1 \
+    libcusolver-11-12-1 \
+    libcusparse-12-1 \
+    libcufft-11-12-1 \
+    # Networking and security
+    curl \
+    ca-certificates \
+    wget \
+    tini \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+    # Create symlinks for Python\n    && ln -s /usr/bin/python3.11 /usr/bin/python \
+    && ln -s /usr/bin/python3.11 /usr/bin/python3
+
+# Create non-root user
+RUN groupadd --gid 1001 appuser && \
+    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser && \
+    mkdir -p /app /app/logs /app/models /app/data /app/temp /app/static && \
+    chown -R appuser:appuser /app
+
+# Copy virtual environment from builder
+COPY --from=gpu-builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Set working directory
+WORKDIR /app
+
+# Copy application code with proper ownership
+COPY --chown=appuser:appuser . .
+
+# Create GPU-optimized startup script
+RUN cat > /app/start-gpu.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# GPU availability check
+if command -v nvidia-smi >/dev/null 2>&1; then
+    echo "GPU Status:"
+    nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits
+    export ML_DEVICE=cuda
+    export TORCH_CUDA_ARCH_LIST="6.0;6.1;7.0;7.5;8.0;8.6"
+else
+    echo "No GPU detected, falling back to CPU"
+    export ML_DEVICE=cpu
+fi
+
+# Wait for database if DB_HOST is provided
+if [ -n "$DB_HOST" ]; then
+    echo "Waiting for database at $DB_HOST:$DB_PORT..."
+    while ! timeout 1 bash -c "echo > /dev/tcp/$DB_HOST/$DB_PORT" 2>/dev/null; do
+        sleep 1
+    done
+    echo "Database is ready!"
+fi
+
+# Wait for Redis if REDIS_HOST is provided
+if [ -n "$REDIS_HOST" ]; then
+    echo "Waiting for Redis at $REDIS_HOST:$REDIS_PORT..."
+    while ! timeout 1 bash -c "echo > /dev/tcp/$REDIS_HOST/$REDIS_PORT" 2>/dev/null; do
+        sleep 1
+    done
+    echo "Redis is ready!"
+fi
+
+# Run database migrations
+if [ "$1" = "web" ] || [ "$1" = "uvicorn" ]; then
+    echo "Running database migrations..."
+    alembic upgrade head || echo "Migration failed or not needed"
+fi
+
+# Execute the main command
+exec "$@"
+EOF
+
+# Make startup script executable
+RUN chmod +x /app/start-gpu.sh && chown appuser:appuser /app/start-gpu.sh
+
+# Switch to non-root user
+USER appuser
+
+# GPU-aware health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health && \
+        curl -f http://localhost:8000/ready || exit 1
+
+# Expose ports
+EXPOSE 8000 8001
+
+# Use tini as PID 1 for proper signal handling
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/start-gpu.sh"]
+
+# Default command with GPU optimization
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+
+# ==================== GPU Worker Stage ====================
+FROM gpu-production as gpu-worker
+
+# Worker-specific environment
+ENV WORKER_TYPE=celery_gpu \
+    CELERY_WORKER_CONCURRENCY=2
+
+# GPU worker command with lower concurrency due to GPU memory
+CMD ["celery", "-A", "app.worker", "worker", "--loglevel=info", "--concurrency=2", "--prefetch-multiplier=1", "--queue=ml_gpu_tasks"]

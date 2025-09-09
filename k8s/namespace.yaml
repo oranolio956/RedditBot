@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-conversation
+  labels:
+    name: ai-conversation
+    environment: production
+    app: ai-conversation-system
+  annotations:
+    description: "AI Conversation System - Production Namespace"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-conversation-monitoring
+  labels:
+    name: ai-conversation-monitoring
+    environment: production
+    app: monitoring
+  annotations:
+    description: "AI Conversation System - Monitoring Namespace"

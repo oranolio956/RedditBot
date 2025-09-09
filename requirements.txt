@@ -1,0 +1,93 @@
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Telegram Bot
+aiogram==3.2.0  # High-performance async framework
+aiogram-dialog==2.1.0  # For complex conversations
+aiohttp-session==2.12.0  # Session support
+
+# Database & ORM
+sqlalchemy==2.0.23
+alembic==1.13.0
+asyncpg==0.29.0  # PostgreSQL async driver
+psycopg2-binary==2.9.9  # PostgreSQL sync driver (backup)
+
+# Redis & Caching
+redis==5.0.1
+redis-py-cluster==2.1.3
+aioredis==2.0.1
+hiredis==2.2.3  # High-performance Redis parser
+
+# ML & Data Science
+torch==2.1.1
+torchvision==0.16.1
+scikit-learn==1.3.2
+numpy==1.24.4
+pandas==2.1.4
+transformers==4.35.2
+sentence-transformers==2.2.2
+
+# Async & Concurrency
+asyncio-throttle==1.0.2
+aiofiles==23.2.1
+aiohttp==3.9.1
+celery==5.3.4
+kombu==5.3.4
+
+# Configuration & Environment
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-decouple==3.8
+dynaconf==3.2.4
+
+# Monitoring & Logging
+prometheus-client==0.19.0
+structlog==23.2.0
+sentry-sdk[fastapi]==1.38.0
+loguru==0.7.2
+
+# Security
+cryptography==41.0.7
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+
+# HTTP Client
+httpx==0.25.2
+aiohttp-session==2.12.0
+
+# Rate Limiting & Circuit Breaking
+slowapi==0.1.9
+pybreaker==1.0.1
+limits==3.6.0  # Advanced rate limiting
+backoff==2.2.1  # Exponential backoff
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+httpx==0.25.2
+factory-boy==3.3.0
+
+# Development Tools
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0
+mypy==1.7.1
+pre-commit==3.6.0
+rich==13.7.0  # Beautiful CLI output
+click==8.1.7  # CLI framework
+
+# Health Checks & Utilities
+psutil==5.9.6
+tenacity==8.2.3  # Retry logic
+ipaddress==1.0.23  # IP address handling
+scipy==1.11.4  # Statistical functions for ML
+numpy==1.24.4  # Already included but ensure version
+aiofiles==23.2.1  # Async file operations
+
+# Production WSGI/ASGI
+gunicorn==21.2.0
+uvloop==0.19.0  # High-performance event loop

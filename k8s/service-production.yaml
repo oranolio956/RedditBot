@@ -1,0 +1,370 @@
+# Kubernetes Service Configurations for AI Conversation System
+# Comprehensive service definitions for all components
+
+# ==================== Application Services ====================
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-conversation-app
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: web
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:region:account:certificate/cert-id"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 8001
+    targetPort: 8001
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: web
+  sessionAffinity: None
+  loadBalancerSourceRanges:
+  - "0.0.0.0/0"  # Restrict this in production to known IPs
+
+---
+# Internal Service for Application (ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-conversation-app-internal
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: web
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 8001
+    targetPort: 8001
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: web
+
+---
+# Headless Service for Application StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-conversation-app-headless
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: web
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 8001
+    targetPort: 8001
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: web
+  publishNotReadyAddresses: true
+
+---
+# ==================== Database Services ====================
+# PostgreSQL Master Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-master-service
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: postgres-master
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "false"
+spec:
+  type: ClusterIP
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: postgres-master
+  sessionAffinity: None
+
+---
+# PostgreSQL Slave Service (Read-only)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-slave-service
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: postgres-slave
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "false"
+spec:
+  type: ClusterIP
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: postgres-slave
+  sessionAffinity: None
+
+---
+# PostgreSQL Headless Services for StatefulSets
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-master-headless
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: postgres-master
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: postgres-master
+  publishNotReadyAddresses: true
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-slave-headless
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: postgres-slave
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: postgres-slave
+  publishNotReadyAddresses: true
+
+---
+# ==================== Redis Services ====================
+# Redis Cluster Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: redis
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+  - name: redis-bus
+    port: 16379
+    targetPort: 16379
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: redis
+  sessionAffinity: None
+
+---
+# Redis Headless Service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: redis
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+  - name: redis-bus
+    port: 16379
+    targetPort: 16379
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: redis
+  publishNotReadyAddresses: true
+
+---
+# ==================== Monitoring Services ====================
+# Prometheus Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: ai-conversation-monitoring
+  labels:
+    app: prometheus
+    component: monitoring
+spec:
+  type: ClusterIP
+  ports:
+  - name: prometheus
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  selector:
+    app: prometheus
+    component: monitoring
+
+---
+# Grafana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: ai-conversation-monitoring
+  labels:
+    app: grafana
+    component: monitoring
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  ports:
+  - name: grafana
+    port: 80
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: grafana
+    component: monitoring
+  loadBalancerSourceRanges:
+  - "10.0.0.0/8"    # Internal access only
+  - "172.16.0.0/12"  # Internal access only
+  - "192.168.0.0/16" # Internal access only
+
+---
+# AlertManager Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager-service
+  namespace: ai-conversation-monitoring
+  labels:
+    app: alertmanager
+    component: monitoring
+spec:
+  type: ClusterIP
+  ports:
+  - name: alertmanager
+    port: 9093
+    targetPort: 9093
+    protocol: TCP
+  selector:
+    app: alertmanager
+    component: monitoring
+
+---
+# ==================== External Services ====================
+# Webhook Service for Telegram (if using separate webhook endpoint)
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-conversation-webhook
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: webhook
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:region:account:certificate/cert-id"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+    # Enable AWS Load Balancer Controller for advanced features
+    kubernetes.io/ingress.class: "aws-load-balancer-controller"
+spec:
+  type: LoadBalancer
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8000
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: web
+  loadBalancerSourceRanges:
+  # Telegram webhook IP ranges (update as needed)
+  - "149.154.160.0/20"
+  - "91.108.4.0/22"
+  - "91.108.56.0/22"
+  - "109.239.140.0/24"
+
+---
+# ==================== NodePort Services (for development) ====================
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-conversation-nodeport
+  namespace: ai-conversation
+  labels:
+    app: ai-conversation-system
+    component: web
+    environment: development
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    nodePort: 30080
+    protocol: TCP
+  - name: metrics
+    port: 8001
+    targetPort: 8001
+    nodePort: 30081
+    protocol: TCP
+  selector:
+    app: ai-conversation-system
+    component: web

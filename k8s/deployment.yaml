@@ -1,0 +1,347 @@
+# Kubernetes Deployment Configuration for Telegram ML Bot
+# Production-ready deployment with high availability and auto-scaling
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegram-ml-bot
+  namespace: telegram-bot
+  labels:
+    app: telegram-ml-bot
+    version: v1.0.0
+    component: web
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: telegram-ml-bot
+      component: web
+  template:
+    metadata:
+      labels:
+        app: telegram-ml-bot
+        component: web
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: telegram-bot-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: telegram-ml-bot
+        image: telegram-ml-bot:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        - containerPort: 8001
+          name: metrics
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8000"
+        - name: WORKERS
+          value: "4"
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: db-host
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: db-password
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: redis-host
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: redis-password
+        - name: TELEGRAM_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: telegram-bot-token
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: secret-key
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: jwt-secret-key
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: sentry-dsn
+              optional: true
+        envFrom:
+        - configMapRef:
+            name: telegram-bot-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+        - name: logs-storage
+          mountPath: /app/logs
+        - name: tmp-storage
+          mountPath: /tmp
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: models-pvc
+      - name: logs-storage
+        emptyDir: {}
+      - name: tmp-storage
+        emptyDir:
+          sizeLimit: 1Gi
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+      - key: "app"
+        operator: "Equal"
+        value: "telegram-bot"
+        effect: "NoSchedule"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - telegram-ml-bot
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegram-ml-bot-worker
+  namespace: telegram-bot
+  labels:
+    app: telegram-ml-bot-worker
+    version: v1.0.0
+    component: worker
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: telegram-ml-bot-worker
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: telegram-ml-bot-worker
+        component: worker
+        version: v1.0.0
+    spec:
+      serviceAccountName: telegram-bot-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: celery-worker
+        image: telegram-ml-bot:v1.0.0
+        imagePullPolicy: IfNotPresent
+        command: ["celery"]
+        args: ["-A", "app.worker", "worker", "--loglevel=info", "--concurrency=4"]
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: db-host
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: db-password
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: redis-host
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: redis-password
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):6379/1"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):6379/2"
+        envFrom:
+        - configMapRef:
+            name: telegram-bot-config
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+        - name: logs-storage
+          mountPath: /app/logs
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: models-pvc
+      - name: logs-storage
+        emptyDir: {}
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        node-type: compute-optimized
+      tolerations:
+      - key: "app"
+        operator: "Equal"
+        value: "telegram-bot"
+        effect: "NoSchedule"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegram-ml-bot-scheduler
+  namespace: telegram-bot
+  labels:
+    app: telegram-ml-bot-scheduler
+    version: v1.0.0
+    component: scheduler
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: telegram-ml-bot-scheduler
+      component: scheduler
+  template:
+    metadata:
+      labels:
+        app: telegram-ml-bot-scheduler
+        component: scheduler
+        version: v1.0.0
+    spec:
+      serviceAccountName: telegram-bot-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: celery-beat
+        image: telegram-ml-bot:v1.0.0
+        imagePullPolicy: IfNotPresent
+        command: ["celery"]
+        args: ["-A", "app.worker", "beat", "--loglevel=info"]
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: db-host
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: db-password
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: redis-host
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: telegram-bot-secrets
+              key: redis-password
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):6379/1"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):6379/2"
+        envFrom:
+        - configMapRef:
+            name: telegram-bot-config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+        volumeMounts:
+        - name: logs-storage
+          mountPath: /app/logs
+      volumes:
+      - name: logs-storage
+        emptyDir: {}
+      nodeSelector:
+        kubernetes.io/arch: amd64

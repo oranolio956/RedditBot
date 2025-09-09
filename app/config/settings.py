@@ -1,0 +1,500 @@
+"""
+Application Configuration Management
+
+Handles environment-specific settings using Pydantic Settings for
+type safety and validation. Supports multiple environments:
+development, staging, production.
+"""
+
+import os
+from pathlib import Path
+from typing import List, Optional, Union
+from functools import lru_cache
+
+from pydantic import Field, validator, AnyHttpUrl
+from pydantic_settings import BaseSettings
+
+
+class DatabaseSettings(BaseSettings):
+    """Database configuration settings."""
+    
+    host: str = Field(default="localhost", env="DB_HOST")
+    port: int = Field(default=5432, env="DB_PORT")
+    name: str = Field(default="telegram_bot", env="DB_NAME")
+    user: str = Field(default="postgres", env="DB_USER")
+    password: str = Field(default="", env="DB_PASSWORD")
+    
+    # Connection pool settings for high concurrency
+    pool_size: int = Field(default=20, env="DB_POOL_SIZE")
+    max_overflow: int = Field(default=30, env="DB_MAX_OVERFLOW")
+    pool_timeout: int = Field(default=30, env="DB_POOL_TIMEOUT")
+    pool_recycle: int = Field(default=3600, env="DB_POOL_RECYCLE")
+    
+    @property
+    def url(self) -> str:
+        """Generate database URL for SQLAlchemy."""
+        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+    
+    @property
+    def sync_url(self) -> str:
+        """Generate synchronous database URL for migrations."""
+        return f"postgresql+psycopg2://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+
+class RedisSettings(BaseSettings):
+    """Redis configuration for caching, rate limiting, and distributed operations."""
+    
+    # Basic connection settings
+    host: str = Field(default="localhost", env="REDIS_HOST")
+    port: int = Field(default=6379, env="REDIS_PORT")
+    db: int = Field(default=0, env="REDIS_DB")
+    password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
+    
+    # Clustering support
+    cluster_enabled: bool = Field(default=False, env="REDIS_CLUSTER_ENABLED")
+    cluster_nodes: List[str] = Field(default=[], env="REDIS_CLUSTER_NODES")
+    cluster_skip_full_coverage_check: bool = Field(default=False, env="REDIS_CLUSTER_SKIP_FULL_COVERAGE")
+    
+    # Sentinel support for high availability
+    sentinel_enabled: bool = Field(default=False, env="REDIS_SENTINEL_ENABLED")
+    sentinel_hosts: List[str] = Field(default=[], env="REDIS_SENTINEL_HOSTS")
+    sentinel_service_name: str = Field(default="mymaster", env="REDIS_SENTINEL_SERVICE_NAME")
+    
+    # Connection pool settings
+    max_connections: int = Field(default=100, env="REDIS_MAX_CONNECTIONS")
+    min_connections: int = Field(default=10, env="REDIS_MIN_CONNECTIONS")
+    retry_on_timeout: bool = Field(default=True, env="REDIS_RETRY_ON_TIMEOUT")
+    socket_timeout: float = Field(default=30.0, env="REDIS_SOCKET_TIMEOUT")
+    socket_connect_timeout: float = Field(default=30.0, env="REDIS_SOCKET_CONNECT_TIMEOUT")
+    
+    # Health check settings
+    health_check_interval: int = Field(default=30, env="REDIS_HEALTH_CHECK_INTERVAL")
+    connection_check_interval: int = Field(default=60, env="REDIS_CONNECTION_CHECK_INTERVAL")
+    
+    # Cache settings with different TTLs for different data types
+    cache_ttl: int = Field(default=3600, env="REDIS_CACHE_TTL")  # 1 hour
+    session_ttl: int = Field(default=86400, env="REDIS_SESSION_TTL")  # 24 hours
+    user_profile_ttl: int = Field(default=604800, env="REDIS_USER_PROFILE_TTL")  # 7 days
+    conversation_context_ttl: int = Field(default=7200, env="REDIS_CONVERSATION_CONTEXT_TTL")  # 2 hours
+    rate_limit_ttl: int = Field(default=3600, env="REDIS_RATE_LIMIT_TTL")  # 1 hour
+    
+    # Memory optimization settings
+    max_memory_policy: str = Field(default="allkeys-lru", env="REDIS_MAX_MEMORY_POLICY")
+    memory_samples: int = Field(default=5, env="REDIS_MEMORY_SAMPLES")
+    compression_enabled: bool = Field(default=True, env="REDIS_COMPRESSION_ENABLED")
+    compression_threshold: int = Field(default=1024, env="REDIS_COMPRESSION_THRESHOLD")  # bytes
+    
+    # Pub/Sub settings
+    pubsub_patterns: List[str] = Field(default=["bot:*", "session:*", "rate_limit:*"], env="REDIS_PUBSUB_PATTERNS")
+    pubsub_buffer_size: int = Field(default=10000, env="REDIS_PUBSUB_BUFFER_SIZE")
+    
+    # Pipeline settings for batch operations
+    pipeline_batch_size: int = Field(default=100, env="REDIS_PIPELINE_BATCH_SIZE")
+    pipeline_timeout: float = Field(default=10.0, env="REDIS_PIPELINE_TIMEOUT")
+    
+    # Failover and recovery settings
+    failover_enabled: bool = Field(default=True, env="REDIS_FAILOVER_ENABLED")
+    failover_timeout: int = Field(default=30, env="REDIS_FAILOVER_TIMEOUT")
+    auto_reconnect: bool = Field(default=True, env="REDIS_AUTO_RECONNECT")
+    reconnect_retries: int = Field(default=5, env="REDIS_RECONNECT_RETRIES")
+    reconnect_delay: float = Field(default=1.0, env="REDIS_RECONNECT_DELAY")
+    
+    # Performance monitoring
+    enable_monitoring: bool = Field(default=True, env="REDIS_ENABLE_MONITORING")
+    slow_log_threshold: int = Field(default=10000, env="REDIS_SLOW_LOG_THRESHOLD")  # microseconds
+    metrics_collection_interval: int = Field(default=60, env="REDIS_METRICS_COLLECTION_INTERVAL")
+    
+    # Security settings
+    ssl_enabled: bool = Field(default=False, env="REDIS_SSL_ENABLED")
+    ssl_cert_file: Optional[str] = Field(default=None, env="REDIS_SSL_CERT_FILE")
+    ssl_key_file: Optional[str] = Field(default=None, env="REDIS_SSL_KEY_FILE")
+    ssl_ca_certs: Optional[str] = Field(default=None, env="REDIS_SSL_CA_CERTS")
+    
+    @property
+    def url(self) -> str:
+        """Generate Redis URL."""
+        if self.ssl_enabled:
+            scheme = "rediss"
+        else:
+            scheme = "redis"
+        
+        auth = f":{self.password}@" if self.password else ""
+        return f"{scheme}://{auth}{self.host}:{self.port}/{self.db}"
+    
+    @property
+    def cluster_urls(self) -> List[str]:
+        """Generate cluster node URLs."""
+        if not self.cluster_nodes:
+            return [self.url]
+        
+        urls = []
+        for node in self.cluster_nodes:
+            if ":" in node:
+                host, port = node.split(":")
+            else:
+                host, port = node, str(self.port)
+            
+            scheme = "rediss" if self.ssl_enabled else "redis"
+            auth = f":{self.password}@" if self.password else ""
+            urls.append(f"{scheme}://{auth}{host}:{port}/{self.db}")
+        
+        return urls
+    
+    @property
+    def sentinel_urls(self) -> List[str]:
+        """Generate sentinel URLs."""
+        urls = []
+        for host_port in self.sentinel_hosts:
+            if ":" in host_port:
+                host, port = host_port.split(":")
+            else:
+                host, port = host_port, "26379"
+            
+            urls.append(f"{host}:{port}")
+        
+        return urls
+    
+    @validator("cluster_nodes", pre=True)
+    def parse_cluster_nodes(cls, v):
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [node.strip() for node in v.split(",") if node.strip()]
+        return v
+    
+    @validator("sentinel_hosts", pre=True)
+    def parse_sentinel_hosts(cls, v):
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [host.strip() for host in v.split(",") if host.strip()]
+        return v
+    
+    @validator("pubsub_patterns", pre=True)
+    def parse_pubsub_patterns(cls, v):
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [pattern.strip() for pattern in v.split(",") if pattern.strip()]
+        return v
+
+
+class TelegramSettings(BaseSettings):
+    """Telegram Bot API configuration."""
+    
+    bot_token: str = Field(default="test_token", env="TELEGRAM_BOT_TOKEN")
+    webhook_url: Optional[str] = Field(default=None, env="TELEGRAM_WEBHOOK_URL")
+    webhook_secret: Optional[str] = Field(default=None, env="TELEGRAM_WEBHOOK_SECRET")
+    
+    # Rate limiting settings for Telegram API
+    rate_limit_calls: int = Field(default=20, env="TELEGRAM_RATE_LIMIT_CALLS")
+    rate_limit_period: int = Field(default=60, env="TELEGRAM_RATE_LIMIT_PERIOD")
+    
+    # Bot behavior settings
+    parse_mode: str = Field(default="HTML", env="TELEGRAM_PARSE_MODE")
+    disable_web_page_preview: bool = Field(default=True)
+    
+    @validator("bot_token")
+    def validate_bot_token(cls, v):
+        if not v:
+            raise ValueError("Bot token is required")
+        
+        # Allow test tokens during development
+        if v.startswith("test_"):
+            return v
+        
+        if not v.startswith(("bot", "BOT")):
+            # Remove bot prefix if exists for validation
+            token_part = v.replace("bot", "").replace("BOT", "")
+            if ":" not in token_part:
+                raise ValueError("Invalid Telegram bot token format")
+        return v
+
+
+class MLSettings(BaseSettings):
+    """Machine Learning model configuration."""
+    
+    model_path: Path = Field(default=Path("models"), env="ML_MODEL_PATH")
+    device: str = Field(default="cpu", env="ML_DEVICE")  # cpu, cuda, mps
+    batch_size: int = Field(default=32, env="ML_BATCH_SIZE")
+    max_sequence_length: int = Field(default=512, env="ML_MAX_SEQUENCE_LENGTH")
+    
+    # Model-specific settings
+    sentiment_model: str = Field(
+        default="cardiffnlp/twitter-roberta-base-sentiment-latest",
+        env="ML_SENTIMENT_MODEL"
+    )
+    embedding_model: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        env="ML_EMBEDDING_MODEL"
+    )
+    
+    # Inference settings
+    enable_gpu: bool = Field(default=False, env="ML_ENABLE_GPU")
+    model_cache_size: int = Field(default=3, env="ML_MODEL_CACHE_SIZE")
+
+
+class SecuritySettings(BaseSettings):
+    """Enhanced security and authentication settings."""
+    
+    secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
+    jwt_secret: str = Field(default="dev-jwt-secret-change-in-production", env="JWT_SECRET_KEY")
+    jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
+    jwt_expiration: int = Field(default=3600, env="JWT_EXPIRATION_SECONDS")
+    
+    # Enhanced rate limiting
+    rate_limit_enabled: bool = Field(default=True, env="RATE_LIMIT_ENABLED")
+    rate_limit_per_minute: int = Field(default=60, env="RATE_LIMIT_PER_MINUTE")
+    rate_limit_per_hour: int = Field(default=1000, env="RATE_LIMIT_PER_HOUR")
+    rate_limit_per_ip_per_minute: int = Field(default=10, env="RATE_LIMIT_PER_IP_PER_MINUTE")
+    rate_limit_burst: int = Field(default=20, env="RATE_LIMIT_BURST")
+    
+    # Security headers
+    enable_security_headers: bool = Field(default=True, env="ENABLE_SECURITY_HEADERS")
+    hsts_max_age: int = Field(default=31536000, env="HSTS_MAX_AGE")  # 1 year
+    
+    # Input validation
+    max_request_size: int = Field(default=10485760, env="MAX_REQUEST_SIZE")  # 10MB
+    max_json_size: int = Field(default=1048576, env="MAX_JSON_SIZE")  # 1MB
+    enable_input_sanitization: bool = Field(default=True, env="ENABLE_INPUT_SANITIZATION")
+    
+    # Admin security
+    admin_users: List[int] = Field(default=[], env="TELEGRAM_ADMIN_USERS")
+    require_admin_2fa: bool = Field(default=True, env="REQUIRE_ADMIN_2FA")
+    admin_session_timeout: int = Field(default=3600, env="ADMIN_SESSION_TIMEOUT")  # 1 hour
+    
+    # IP security
+    enable_ip_whitelist: bool = Field(default=False, env="ENABLE_IP_WHITELIST")
+    ip_whitelist: List[str] = Field(default=[], env="IP_WHITELIST")
+    enable_ip_blocking: bool = Field(default=True, env="ENABLE_IP_BLOCKING")
+    max_failed_attempts: int = Field(default=10, env="MAX_FAILED_ATTEMPTS")
+    block_duration: int = Field(default=3600, env="BLOCK_DURATION")  # 1 hour
+    
+    # Webhook security
+    webhook_signature_required: bool = Field(default=True, env="WEBHOOK_SIGNATURE_REQUIRED")
+    webhook_ip_validation: bool = Field(default=True, env="WEBHOOK_IP_VALIDATION")
+    webhook_timeout: int = Field(default=30, env="WEBHOOK_TIMEOUT")
+    
+    # Content security
+    enable_content_filtering: bool = Field(default=True, env="ENABLE_CONTENT_FILTERING")
+    max_message_length: int = Field(default=10000, env="MAX_MESSAGE_LENGTH")
+    enable_url_validation: bool = Field(default=True, env="ENABLE_URL_VALIDATION")
+    
+    # Encryption
+    enable_data_encryption: bool = Field(default=True, env="ENABLE_DATA_ENCRYPTION")
+    encryption_key: Optional[str] = Field(default=None, env="ENCRYPTION_KEY")
+    
+    # CORS settings
+    cors_origins: List[str] = Field(
+        default=["http://localhost:3000", "http://localhost:8000"],
+        env="CORS_ORIGINS"
+    )
+    
+    # Security monitoring
+    enable_security_monitoring: bool = Field(default=True, env="ENABLE_SECURITY_MONITORING")
+    security_alert_threshold: int = Field(default=5, env="SECURITY_ALERT_THRESHOLD")
+    
+    @validator("cors_origins", pre=True)
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            return [url.strip() for url in v.split(",")]
+        return v
+    
+    @validator("admin_users", pre=True)
+    def parse_admin_users(cls, v):
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [int(uid.strip()) for uid in v.split(",") if uid.strip().isdigit()]
+        return v
+    
+    @validator("ip_whitelist", pre=True)
+    def parse_ip_whitelist(cls, v):
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [ip.strip() for ip in v.split(",") if ip.strip()]
+        return v
+    
+    @validator("secret_key")
+    def validate_secret_key(cls, v):
+        if len(v) < 32:
+            raise ValueError("Secret key must be at least 32 characters long")
+        return v
+    
+    @validator("jwt_secret")
+    def validate_jwt_secret(cls, v):
+        if len(v) < 32:
+            raise ValueError("JWT secret must be at least 32 characters long")
+        return v
+
+
+class MonitoringSettings(BaseSettings):
+    """Monitoring, logging, and observability settings."""
+    
+    # Logging
+    log_level: str = Field(default="INFO", env="LOG_LEVEL")
+    log_format: str = Field(default="json", env="LOG_FORMAT")  # json, text
+    
+    # Sentry for error tracking
+    sentry_dsn: Optional[str] = Field(default=None, env="SENTRY_DSN")
+    sentry_environment: str = Field(default="development", env="SENTRY_ENVIRONMENT")
+    
+    # Prometheus metrics
+    metrics_enabled: bool = Field(default=True, env="METRICS_ENABLED")
+    metrics_port: int = Field(default=8001, env="METRICS_PORT")
+    
+    # Health checks
+    health_check_interval: int = Field(default=30, env="HEALTH_CHECK_INTERVAL")
+
+
+class CelerySettings(BaseSettings):
+    """Celery task queue configuration."""
+    
+    broker_url: str = Field(default="redis://localhost:6379/1", env="CELERY_BROKER_URL")
+    result_backend: str = Field(default="redis://localhost:6379/2", env="CELERY_RESULT_BACKEND")
+    
+    # Worker settings
+    worker_concurrency: int = Field(default=4, env="CELERY_WORKER_CONCURRENCY")
+    task_time_limit: int = Field(default=300, env="CELERY_TASK_TIME_LIMIT")
+    task_soft_time_limit: int = Field(default=240, env="CELERY_TASK_SOFT_TIME_LIMIT")
+    
+    # Queue configuration
+    default_queue: str = Field(default="default", env="CELERY_DEFAULT_QUEUE")
+    ml_queue: str = Field(default="ml_tasks", env="CELERY_ML_QUEUE")
+    
+    # Retry settings
+    task_max_retries: int = Field(default=3, env="CELERY_TASK_MAX_RETRIES")
+    task_retry_delay: int = Field(default=60, env="CELERY_TASK_RETRY_DELAY")
+
+
+class AdvancedTypingSettings(BaseSettings):
+    """Advanced Typing Simulator configuration."""
+    
+    # Core typing system settings
+    enable_advanced_typing: bool = Field(default=True, env="ENABLE_ADVANCED_TYPING")
+    enable_typing_caching: bool = Field(default=True, env="ENABLE_TYPING_CACHING")
+    enable_typing_integration: bool = Field(default=True, env="ENABLE_TYPING_INTEGRATION")
+    
+    # Performance and scaling settings
+    max_concurrent_typing_sessions: int = Field(default=1000, env="MAX_TYPING_SESSIONS")
+    typing_cache_ttl: int = Field(default=300, env="TYPING_CACHE_TTL")  # 5 minutes
+    typing_session_timeout: int = Field(default=60, env="TYPING_SESSION_TIMEOUT")  # 1 minute max
+    
+    # Simulation quality settings
+    max_simulation_time: float = Field(default=30.0, env="MAX_SIMULATION_TIME")  # 30 seconds max
+    min_simulation_time: float = Field(default=0.3, env="MIN_SIMULATION_TIME")   # 0.3 seconds min
+    enable_error_simulation: bool = Field(default=True, env="ENABLE_ERROR_SIMULATION")
+    enable_pause_simulation: bool = Field(default=True, env="ENABLE_PAUSE_SIMULATION")
+    
+    # Anti-detection settings
+    enable_anti_detection: bool = Field(default=True, env="ENABLE_ANTI_DETECTION")
+    pattern_randomization_level: float = Field(default=0.3, env="PATTERN_RANDOMIZATION_LEVEL")  # 0-1
+    detection_prevention_enabled: bool = Field(default=True, env="DETECTION_PREVENTION_ENABLED")
+    
+    # Performance monitoring
+    enable_typing_metrics: bool = Field(default=True, env="ENABLE_TYPING_METRICS")
+    metrics_collection_interval: int = Field(default=60, env="TYPING_METRICS_INTERVAL")  # 1 minute
+    
+    # Rate limiting for typing indicators
+    typing_rate_limit_per_user: int = Field(default=10, env="TYPING_RATE_LIMIT_PER_USER")  # per minute
+    typing_burst_limit: int = Field(default=3, env="TYPING_BURST_LIMIT")
+    
+    # Fallback settings
+    enable_simple_fallback: bool = Field(default=True, env="ENABLE_SIMPLE_FALLBACK")
+    fallback_typing_speed: float = Field(default=120.0, env="FALLBACK_TYPING_SPEED")  # chars per minute
+    
+    # Personality integration
+    enable_personality_typing: bool = Field(default=True, env="ENABLE_PERSONALITY_TYPING")
+    personality_adaptation_strength: float = Field(default=0.7, env="PERSONALITY_ADAPTATION_STRENGTH")  # 0-1
+    
+    # Context awareness
+    enable_context_adaptation: bool = Field(default=True, env="ENABLE_CONTEXT_ADAPTATION")
+    enable_conversation_flow_analysis: bool = Field(default=True, env="ENABLE_CONVERSATION_FLOW")
+    enable_emotional_state_modeling: bool = Field(default=True, env="ENABLE_EMOTIONAL_STATE_MODELING")
+    
+    # Debug and development
+    enable_typing_debug_logs: bool = Field(default=False, env="ENABLE_TYPING_DEBUG_LOGS")
+    typing_simulation_logging: bool = Field(default=False, env="TYPING_SIMULATION_LOGGING")
+    
+    @validator("pattern_randomization_level")
+    def validate_randomization_level(cls, v):
+        if not 0 <= v <= 1:
+            raise ValueError("Pattern randomization level must be between 0 and 1")
+        return v
+    
+    @validator("personality_adaptation_strength")
+    def validate_adaptation_strength(cls, v):
+        if not 0 <= v <= 1:
+            raise ValueError("Personality adaptation strength must be between 0 and 1")
+        return v
+    
+    @validator("max_simulation_time")
+    def validate_max_simulation_time(cls, v):
+        if v <= 0 or v > 300:  # Max 5 minutes
+            raise ValueError("Max simulation time must be between 0 and 300 seconds")
+        return v
+
+
+class Settings(BaseSettings):
+    """Main application settings combining all configuration sections."""
+    
+    # Environment
+    environment: str = Field(default="development", env="ENVIRONMENT")
+    debug: bool = Field(default=False, env="DEBUG")
+    testing: bool = Field(default=False, env="TESTING")
+    
+    # Application settings
+    app_name: str = Field(default="Telegram ML Bot", env="APP_NAME")
+    app_version: str = Field(default="1.0.0", env="APP_VERSION")
+    api_prefix: str = Field(default="/api/v1", env="API_PREFIX")
+    
+    # Server settings
+    host: str = Field(default="0.0.0.0", env="HOST")
+    port: int = Field(default=8000, env="PORT")
+    workers: int = Field(default=1, env="WORKERS")
+    
+    # Configuration sections
+    database: DatabaseSettings = DatabaseSettings()
+    redis: RedisSettings = RedisSettings()
+    advanced_typing: AdvancedTypingSettings = AdvancedTypingSettings()
+    telegram: TelegramSettings = TelegramSettings()
+    ml: MLSettings = MLSettings()
+    security: SecuritySettings = SecuritySettings()
+    monitoring: MonitoringSettings = MonitoringSettings()
+    celery: CelerySettings = CelerySettings()
+    
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+    
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development environment."""
+        return self.environment.lower() == "development"
+    
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production environment."""
+        return self.environment.lower() == "production"
+    
+    @property
+    def is_testing(self) -> bool:
+        """Check if running in testing environment."""
+        return self.testing or self.environment.lower() == "testing"
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    """
+    Get cached application settings.
+    
+    Uses LRU cache to ensure settings are loaded only once
+    and reused across the application.
+    """
+    return Settings()
+
+
+# Export settings instance for easy import
+settings = get_settings()
