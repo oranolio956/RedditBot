@@ -368,6 +368,85 @@ class CelerySettings(BaseSettings):
     task_retry_delay: int = Field(default=60, env="CELERY_TASK_RETRY_DELAY")
 
 
+class StripeSettings(BaseSettings):
+    """Stripe payment processing configuration."""
+    
+    # API Keys
+    publishable_key: str = Field(default="pk_test_...", env="STRIPE_PUBLISHABLE_KEY")
+    secret_key: str = Field(default="sk_test_...", env="STRIPE_SECRET_KEY")
+    webhook_secret: str = Field(default="whsec_test_...", env="STRIPE_WEBHOOK_SECRET")
+    
+    # API Configuration
+    api_version: str = Field(default="2023-10-16", env="STRIPE_API_VERSION")
+    test_mode: bool = Field(default=True, env="STRIPE_TEST_MODE")
+    
+    # Customer Portal
+    portal_configuration_id: Optional[str] = Field(default=None, env="STRIPE_PORTAL_CONFIGURATION_ID")
+    
+    # Tax Settings
+    tax_enabled: bool = Field(default=False, env="STRIPE_TAX_ENABLED")
+    automatic_tax: bool = Field(default=False, env="STRIPE_AUTOMATIC_TAX")
+    
+    # Webhook Settings
+    webhook_endpoint_url: Optional[str] = Field(default=None, env="STRIPE_WEBHOOK_ENDPOINT_URL")
+    webhook_events: List[str] = Field(
+        default=[
+            "customer.subscription.created",
+            "customer.subscription.updated", 
+            "customer.subscription.deleted",
+            "invoice.payment_succeeded",
+            "invoice.payment_failed",
+            "customer.created",
+            "payment_method.attached"
+        ],
+        env="STRIPE_WEBHOOK_EVENTS"
+    )
+    
+    # Retry and Timeout Settings
+    request_timeout: int = Field(default=30, env="STRIPE_REQUEST_TIMEOUT")
+    max_network_retries: int = Field(default=3, env="STRIPE_MAX_RETRIES")
+    
+    # Dunning Management
+    max_payment_retries: int = Field(default=3, env="STRIPE_MAX_PAYMENT_RETRIES")
+    retry_delay_days: List[int] = Field(default=[1, 3, 7], env="STRIPE_RETRY_DELAY_DAYS")
+    
+    # Security Settings
+    require_webhook_signature: bool = Field(default=True, env="STRIPE_REQUIRE_WEBHOOK_SIGNATURE")
+    enable_idempotency_keys: bool = Field(default=True, env="STRIPE_ENABLE_IDEMPOTENCY_KEYS")
+    
+    @validator("webhook_events", pre=True)
+    def parse_webhook_events(cls, v):
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [event.strip() for event in v.split(",") if event.strip()]
+        return v
+    
+    @validator("retry_delay_days", pre=True)
+    def parse_retry_delay_days(cls, v):
+        if isinstance(v, str):
+            return [int(day.strip()) for day in v.split(",") if day.strip().isdigit()]
+        return v
+    
+    @validator("secret_key")
+    def validate_secret_key(cls, v):
+        if not v or v.startswith("sk_test_..."):
+            return v  # Allow default test keys
+        
+        if not v.startswith(("sk_test_", "sk_live_")):
+            raise ValueError("Invalid Stripe secret key format")
+        return v
+    
+    @validator("publishable_key")
+    def validate_publishable_key(cls, v):
+        if not v or v.startswith("pk_test_..."):
+            return v  # Allow default test keys
+            
+        if not v.startswith(("pk_test_", "pk_live_")):
+            raise ValueError("Invalid Stripe publishable key format")
+        return v
+
+
 class AdvancedTypingSettings(BaseSettings):
     """Advanced Typing Simulator configuration."""
     
@@ -457,6 +536,7 @@ class Settings(BaseSettings):
     # Configuration sections
     database: DatabaseSettings = DatabaseSettings()
     redis: RedisSettings = RedisSettings()
+    stripe: StripeSettings = StripeSettings()
     advanced_typing: AdvancedTypingSettings = AdvancedTypingSettings()
     telegram: TelegramSettings = TelegramSettings()
     ml: MLSettings = MLSettings()

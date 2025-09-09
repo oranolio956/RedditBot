@@ -75,6 +75,9 @@ pytest-mock==3.12.0
 httpx==0.25.2
 factory-boy==3.3.0
 
+# Payment Processing
+stripe==7.8.0  # Stripe payment processing
+
 # Development Tools
 black==23.11.0
 isort==5.12.0
