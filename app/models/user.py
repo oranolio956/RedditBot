@@ -166,6 +166,9 @@ class User(FullAuditModel):
     ghost_conversations = relationship("GhostConversation", back_populates="user")
     archaeology_sessions = relationship("ArchaeologySession", back_populates="user")
     
+    # Emotional Intelligence relationships
+    emotional_profile = relationship("EmotionalProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    
     __table_args__ = (
         Index('idx_user_telegram_id', 'telegram_id'),
         Index('idx_user_username', 'username'),

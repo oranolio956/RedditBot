@@ -25,6 +25,11 @@ from app.models.sharing import (
     ShareableContent, ContentShare, ReferralProgram, UserReferral,
     ViralMetrics, ShareableContentType, SocialPlatform
 )
+from app.models.emotional_intelligence import (
+    EmotionalProfile, EmotionReading, EmpathyAssessment, EmotionalInteraction,
+    EmotionTrajectory, BasicEmotion, EmotionIntensity, DetectionModality,
+    EmotionRegulationStrategy, CrisisLevel
+)
 
 __all__ = [
     # User models
@@ -89,4 +94,16 @@ __all__ = [
     "ViralMetrics",
     "ShareableContentType",
     "SocialPlatform",
+    
+    # Emotional Intelligence models
+    "EmotionalProfile",
+    "EmotionReading",
+    "EmpathyAssessment",
+    "EmotionalInteraction",
+    "EmotionTrajectory",
+    "BasicEmotion",
+    "EmotionIntensity",
+    "DetectionModality",
+    "EmotionRegulationStrategy",
+    "CrisisLevel",
 ]
