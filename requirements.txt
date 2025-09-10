@@ -36,6 +36,10 @@ shapely==2.0.2
 nltk==3.8.1
 spacy==3.7.2
 
+# Digital Synesthesia Dependencies
+librosa==0.10.1  # Advanced audio analysis
+colorsys  # Built-in Python color space conversions
+
 # Performance & Optimization
 numba==0.58.1
 hiredis==2.2.3  # High-performance Redis parser

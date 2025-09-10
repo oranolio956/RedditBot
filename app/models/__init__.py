@@ -30,6 +30,11 @@ from app.models.emotional_intelligence import (
     EmotionTrajectory, BasicEmotion, EmotionIntensity, DetectionModality,
     EmotionRegulationStrategy, CrisisLevel
 )
+from app.models.synesthesia import (
+    SynestheticProfile, SynestheticTranslation, CrossModalMapping,
+    SynestheticExperience, HapticPattern, SynestheticResearchData,
+    SynestheticCalibrationSession
+)
 
 __all__ = [
     # User models
@@ -106,4 +111,13 @@ __all__ = [
     "DetectionModality",
     "EmotionRegulationStrategy",
     "CrisisLevel",
+    
+    # Digital Synesthesia models
+    "SynestheticProfile",
+    "SynestheticTranslation",
+    "CrossModalMapping",
+    "SynestheticExperience", 
+    "HapticPattern",
+    "SynestheticResearchData",
+    "SynestheticCalibrationSession",
 ]

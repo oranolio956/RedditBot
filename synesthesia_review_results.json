@@ -1,0 +1,100 @@
+{
+  "timestamp": "2025-09-10T03:38:32.936697",
+  "architecture_score": 106,
+  "innovation_score": 86,
+  "security_score": 100,
+  "production_readiness": 98,
+  "scientific_accuracy": 62,
+  "technical_implementation": 118,
+  "overall_status": "GREEN",
+  "detailed_analysis": {
+    "database": {
+      "models_count": 7,
+      "relationships": 9,
+      "indexes": 24,
+      "data_types": [
+        "JSONB",
+        "Boolean",
+        "Integer",
+        "Float",
+        "ARRAY",
+        "String",
+        "UUID",
+        "LargeBinary",
+        "DateTime",
+        "Text"
+      ],
+      "complexity_score": 1.0,
+      "scientific_accuracy": 1.0,
+      "issues": []
+    },
+    "services": {
+      "services_count": 5,
+      "total_lines": 4682,
+      "classes_count": 38,
+      "async_methods": 52,
+      "ai_integrations": 21,
+      "error_handling": 40,
+      "scientific_accuracy": 0.5818181818181818,
+      "performance_features": 20,
+      "issues": [],
+      "performance_ratio": 1.368421052631579
+    },
+    "api": {
+      "endpoints_count": 11,
+      "http_methods": [
+        "post",
+        "get"
+      ],
+      "response_models": 6,
+      "error_handling": 23,
+      "authentication": 44,
+      "validation": 0,
+      "documentation": 19,
+      "issues": [],
+      "quality_score": 1.0
+    },
+    "schemas": {
+      "schemas_count": 19,
+      "validation_rules": 134,
+      "custom_validators": 3,
+      "field_constraints": 73,
+      "examples": 4,
+      "type_safety": 150,
+      "issues": [],
+      "quality_score": 1.0
+    },
+    "scientific": {
+      "research_terms": 29,
+      "neuroscience_accuracy": 1.2222222222222223,
+      "psychoacoustic_principles": 0,
+      "synesthesia_types": 0.8333333333333334,
+      "authenticity_measures": 0,
+      "scientific_score": 0.6278954976582403,
+      "issues": [],
+      "research_density": 0.14036038739466922
+    },
+    "performance": {
+      "async_patterns": 20,
+      "caching_mechanisms": 0,
+      "optimization_features": 15,
+      "latency_targets": 0,
+      "performance_monitoring": 0.8,
+      "performance_score": 0.94,
+      "issues": []
+    },
+    "security": {
+      "authentication": 1,
+      "input_validation": 1.0,
+      "data_encryption": 1.0,
+      "access_control": 1,
+      "security_headers": 0,
+      "security_score": 1.0,
+      "issues": []
+    }
+  },
+  "critical_issues": [],
+  "recommendations": [
+    "Strengthen research foundation: Add more scientific references"
+  ]
+}
