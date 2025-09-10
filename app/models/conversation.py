@@ -539,6 +539,10 @@ class Message(FullAuditModel):
     user = relationship("User", back_populates="messages")
     reply_to = relationship("Message", remote_side="Message.id", backref="replies")
     
+    # Revolutionary Features Relationships
+    spatial_memory = relationship("SpatialMemory", back_populates="message", uselist=False)
+    keystroke_pattern = relationship("KeystrokePattern", back_populates="message", uselist=False)
+    
     # Database constraints and indexes
     __table_args__ = (
         Index('idx_message_conversation_created', 'conversation_id', 'created_at'),

@@ -1,0 +1,178 @@
+{
+  "timestamp": "2025-09-10T00:30:41.277100",
+  "system_info": {
+    "cpu_cores": 10,
+    "memory_gb": 16.0,
+    "python_version": "3.9.6"
+  },
+  "overall_stats": {
+    "total_time": 75.90013027191162,
+    "avg_memory_mb": 32.872395833333336,
+    "max_memory_mb": 33.078125,
+    "avg_cpu_percent": 0.10000000000000002
+  },
+  "results": [
+    {
+      "feature": "Consciousness Mirroring",
+      "operation": "Message Processing #1",
+      "execution_time": 1.8877840042114258,
+      "memory_usage_mb": 32.8125,
+      "cpu_percent": 0.1,
+      "throughput": 0.5297216195121458,
+      "success": true
+    },
+    {
+      "feature": "Consciousness Mirroring",
+      "operation": "Message Processing #2",
+      "execution_time": 1.8918099403381348,
+      "memory_usage_mb": 32.8125,
+      "cpu_percent": 0.1,
+      "throughput": 0.5285943258239059,
+      "success": true
+    },
+    {
+      "feature": "Consciousness Mirroring",
+      "operation": "Message Processing #3",
+      "execution_time": 1.8894150257110596,
+      "memory_usage_mb": 32.8125,
+      "cpu_percent": 0.1,
+      "throughput": 0.5292643418158811,
+      "success": true
+    },
+    {
+      "feature": "Consciousness Mirroring",
+      "operation": "Message Processing #4",
+      "execution_time": 1.8876171112060547,
+      "memory_usage_mb": 32.8125,
+      "cpu_percent": 0.1,
+      "throughput": 0.5297684546634939,
+      "success": true
+    },
+    {
+      "feature": "Consciousness Mirroring",
+      "operation": "Message Processing #5",
+      "execution_time": 1.8921840190887451,
+      "memory_usage_mb": 32.8125,
+      "cpu_percent": 0.1,
+      "throughput": 0.5284898244102013,
+      "success": true
+    },
+    {
+      "feature": "Memory Palace",
+      "operation": "Memory Storage #1",
+      "execution_time": 2.0444939136505127,
+      "memory_usage_mb": 32.8125,
+      "cpu_percent": 0.1,
+      "throughput": 0.4891185996315667,
+      "success": true
+    },
+    {
+      "feature": "Memory Palace",
+      "operation": "Memory Storage #2",
+      "execution_time": 2.0460469722747803,
+      "memory_usage_mb": 32.8125,
+      "cpu_percent": 0.1,
+      "throughput": 0.48874733256402575,
+      "success": true
+    },
+    {
+      "feature": "Memory Palace",
+      "operation": "Memory Storage #3",
+      "execution_time": 2.046051025390625,
+      "memory_usage_mb": 32.8125,
+      "cpu_percent": 0.1,
+      "throughput": 0.4887463643821314,
+      "success": true
+    },
+    {
+      "feature": "Memory Palace",
+      "operation": "Memory Storage #4",
+      "execution_time": 2.043393135070801,
+      "memory_usage_mb": 32.828125,
+      "cpu_percent": 0.1,
+      "throughput": 0.4893820884669613,
+      "success": true
+    },
+    {
+      "feature": "Memory Palace",
+      "operation": "Memory Storage #5",
+      "execution_time": 2.04445219039917,
+      "memory_usage_mb": 32.828125,
+      "cpu_percent": 0.1,
+      "throughput": 0.48912858158094397,
+      "success": true
+    },
+    {
+      "feature": "Memory Palace",
+      "operation": "Spatial Query",
+      "execution_time": 0.5921497344970703,
+      "memory_usage_mb": 32.828125,
+      "cpu_percent": 0.1,
+      "throughput": 1.6887620507832002,
+      "success": true
+    },
+    {
+      "feature": "Temporal Archaeology",
+      "operation": "Linguistic Fingerprinting",
+      "execution_time": 1.8648591041564941,
+      "memory_usage_mb": 32.859375,
+      "cpu_percent": 0.1,
+      "throughput": 0.536233540523865,
+      "success": true
+    },
+    {
+      "feature": "Temporal Archaeology",
+      "operation": "Pattern Discovery",
+      "execution_time": 1.3333790302276611,
+      "memory_usage_mb": 32.890625,
+      "cpu_percent": 0.1,
+      "throughput": 0.7499742963778724,
+      "success": true
+    },
+    {
+      "feature": "Temporal Archaeology",
+      "operation": "Conversation Reconstruction",
+      "execution_time": 5.283302068710327,
+      "memory_usage_mb": 32.890625,
+      "cpu_percent": 0.1,
+      "throughput": 0.18927556800554157,
+      "success": true
+    },
+    {
+      "feature": "System Concurrency",
+      "operation": "1 Concurrent Users",
+      "execution_time": 11.593059062957764,
+      "memory_usage_mb": 32.984375,
+      "cpu_percent": 0.1,
+      "throughput": 0.08625850990401732,
+      "success": true
+    },
+    {
+      "feature": "System Concurrency",
+      "operation": "5 Concurrent Users",
+      "execution_time": 11.34700083732605,
+      "memory_usage_mb": 33.0,
+      "cpu_percent": 0.1,
+      "throughput": 0.44064507191648916,
+      "success": true
+    },
+    {
+      "feature": "System Concurrency",
+      "operation": "10 Concurrent Users",
+      "execution_time": 11.916824102401733,
+      "memory_usage_mb": 33.015625,
+      "cpu_percent": 0.1,
+      "throughput": 0.8391497528258881,
+      "success": true
+    },
+    {
+      "feature": "System Concurrency",
+      "operation": "25 Concurrent Users",
+      "execution_time": 12.296308994293213,
+      "memory_usage_mb": 33.078125,
+      "cpu_percent": 0.1,
+      "throughput": 2.0331304305708846,
+      "success": true
+    }
+  ]
+}

@@ -147,6 +147,25 @@ class User(FullAuditModel):
     group_memberships = relationship("GroupMember", back_populates="user", cascade="all, delete-orphan")
     
     # Database indexes for performance
+    # Revolutionary Features Relationships
+    cognitive_profile = relationship("CognitiveProfile", back_populates="user", uselist=False)
+    keystroke_patterns = relationship("KeystrokePattern", back_populates="user")
+    consciousness_sessions = relationship("ConsciousnessSession", back_populates="user")
+    decision_history = relationship("DecisionHistory", back_populates="user")
+    personality_evolution = relationship("PersonalityEvolution", back_populates="user")
+    mirror_calibrations = relationship("MirrorCalibration", back_populates="user")
+    
+    # Memory Palace relationships
+    memory_palaces = relationship("MemoryPalace", back_populates="user")
+    
+    # Temporal Archaeology relationships
+    conversation_fragments = relationship("ConversationFragment", back_populates="user")
+    reconstructed_messages = relationship("ReconstructedMessage", back_populates="user")
+    temporal_patterns = relationship("TemporalPattern", back_populates="user")
+    linguistic_fingerprint = relationship("LinguisticFingerprint", back_populates="user", uselist=False)
+    ghost_conversations = relationship("GhostConversation", back_populates="user")
+    archaeology_sessions = relationship("ArchaeologySession", back_populates="user")
+    
     __table_args__ = (
         Index('idx_user_telegram_id', 'telegram_id'),
         Index('idx_user_username', 'username'),
