@@ -10,6 +10,7 @@ from .memory_palace import router as memory_palace_router
 from .temporal_archaeology import router as temporal_archaeology_router
 from .emotional_intelligence import router as emotional_intelligence_router
 from .synesthesia import router as synesthesia_router
+from .neural_dreams import router as neural_dreams_router
 
 # Create main API v1 router
 router = APIRouter()
@@ -23,5 +24,6 @@ router.include_router(memory_palace_router, prefix="/memory-palace", tags=["Memo
 router.include_router(temporal_archaeology_router, prefix="/archaeology", tags=["Temporal Archaeology"])
 router.include_router(emotional_intelligence_router, prefix="/emotional-intelligence", tags=["Emotional Intelligence"])
 router.include_router(synesthesia_router, prefix="/synesthesia", tags=["Digital Synesthesia"])
+router.include_router(neural_dreams_router, tags=["Neural Dreams"])
 
 __all__ = ["router"]

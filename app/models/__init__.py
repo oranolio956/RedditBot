@@ -35,6 +35,12 @@ from app.models.synesthesia import (
     SynestheticExperience, HapticPattern, SynestheticResearchData,
     SynestheticCalibrationSession
 )
+from app.models.neural_dreams import (
+    DreamProfile, DreamSession, DreamContent, BiometricReading,
+    TherapeuticProtocol, DreamAnalysis, SafetyMonitoring, LucidDreamTraining,
+    NeuroplasticityTracker, DreamState, TherapeuticProtocolType, CrisisLevel,
+    BiometricDeviceType
+)
 
 __all__ = [
     # User models
@@ -120,4 +126,19 @@ __all__ = [
     "HapticPattern",
     "SynestheticResearchData",
     "SynestheticCalibrationSession",
+    
+    # Neural Dreams models
+    "DreamProfile",
+    "DreamSession",
+    "DreamContent",
+    "BiometricReading",
+    "TherapeuticProtocol",
+    "DreamAnalysis",
+    "SafetyMonitoring",
+    "LucidDreamTraining",
+    "NeuroplasticityTracker",
+    "DreamState",
+    "TherapeuticProtocolType",
+    "CrisisLevel",
+    "BiometricDeviceType",
 ]
