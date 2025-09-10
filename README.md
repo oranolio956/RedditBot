@@ -1,6 +1,6 @@
-# Telegram ML Bot - Production Architecture
+# AI-Powered Telegram Conversation Bot 🤖
 
-A production-ready, high-concurrency Telegram bot with machine learning capabilities, built for scalability and reliability.
+An advanced AI conversation bot for Telegram that learns and adapts to user personalities, featuring subscription-based monetization ($150/week), comprehensive risk management, and production-ready infrastructure.
 
 ## 🏗️ Architecture Overview
 
