@@ -41,6 +41,16 @@ from app.models.neural_dreams import (
     NeuroplasticityTracker, DreamState, TherapeuticProtocolType, CrisisLevel,
     BiometricDeviceType
 )
+from app.models.temporal_dilution import (
+    TemporalProfile, TemporalSession, FlowStateSession, TemporalBiometricReading,
+    TemporalSafetyMonitoring, TemporalLearningProtocol, CircadianIntegration,
+    TemporalState, FlowStateType, TemporalCueType, CircadianPhase, SafetyLevel
+)
+from app.models.reality_synthesis import (
+    RealityProfile, RealitySession, SpatialEnvironment, RealitySafetyMonitoring,
+    CollaborativeRealitySession, PortalSystem, RealityLayer, SpatialComputingPlatform,
+    RealityRenderingEngine, RealityTransitionType, TherapeuticRealityProtocol
+)
 
 __all__ = [
     # User models
@@ -141,4 +151,31 @@ __all__ = [
     "TherapeuticProtocolType",
     "CrisisLevel",
     "BiometricDeviceType",
+    
+    # Temporal Dilution models
+    "TemporalProfile",
+    "TemporalSession",
+    "FlowStateSession",
+    "TemporalBiometricReading",
+    "TemporalSafetyMonitoring",
+    "TemporalLearningProtocol",
+    "CircadianIntegration",
+    "TemporalState",
+    "FlowStateType",
+    "TemporalCueType",
+    "CircadianPhase",
+    "SafetyLevel",
+    
+    # Reality Synthesis models
+    "RealityProfile",
+    "RealitySession",
+    "SpatialEnvironment",
+    "RealitySafetyMonitoring",
+    "CollaborativeRealitySession",
+    "PortalSystem",
+    "RealityLayer",
+    "SpatialComputingPlatform",
+    "RealityRenderingEngine",
+    "RealityTransitionType",
+    "TherapeuticRealityProtocol",
 ]
