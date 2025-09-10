@@ -646,5 +646,5 @@ class UserPersonalityMapping(FullAuditModel):
         }
 
 
-# Update User model to include personality relationships
-User.personality_mappings = relationship("UserPersonalityMapping", back_populates="user", cascade="all, delete-orphan")
+# User model personality relationships are defined in the User model itself
+# to avoid circular import issues

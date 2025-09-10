@@ -20,7 +20,8 @@ from aiogram.types import (
     Message, CallbackQuery, InlineQuery, Update,
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardMarkup, KeyboardButton,
-    BotCommand, BotCommandScopeDefault
+    BotCommand, BotCommandScopeDefault,
+    Voice, Audio, Document
 )
 from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -31,6 +32,9 @@ from .session import SessionManager, MessageContext, ConversationMode
 from .anti_ban import AntiBanManager, RiskLevel
 from .metrics import TelegramMetrics
 from .rate_limiter import AdvancedRateLimiter
+from ..services.voice_integration import (
+    get_voice_integration_service, process_voice_message as process_voice_integration
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -80,6 +84,9 @@ class TelegramHandlers:
             'rate_limited': "⏳ Please slow down a bit. I'm here when you're ready!",
             'processing': "🤔 Let me think about that...",
             'unknown_command': "🤷‍♂️ I'm not sure what you mean. Try /help to see what I can do!",
+            'voice_processing': "🎤 Processing your voice message...",
+            'voice_error': "❌ Sorry, I couldn't process your voice message. Try sending it as text!",
+            'generating_voice': "🔊 Generating voice response...",
         }
         
         # Setup handlers
@@ -104,6 +111,12 @@ class TelegramHandlers:
         
         # Text message handler
         self.router.message(F.text)(self.handle_text_message)
+        
+        # Voice message handler
+        self.router.message(F.voice)(self.handle_voice_message)
+        
+        # Audio message handler (for uploaded audio files)
+        self.router.message(F.audio)(self.handle_audio_message)
         
         # Callback query handler
         self.router.callback_query()(self.handle_callback_query)
@@ -182,6 +195,10 @@ class TelegramHandlers:
             await state.set_state(ConversationStates.idle)
             
             logger.info(f"Start command processed for user {message.from_user.id}")
+            
+        except Exception as e:
+            logger.error("Error handling start command", error=str(e))
+            await self._handle_command_error(message, "start", str(e))
     
     async def _validate_and_sanitize_message(self, message: Message) -> bool:
         """Validate and sanitize incoming message content."""
@@ -313,10 +330,6 @@ class TelegramHandlers:
                 suspicious_count += 1
         
         return suspicious_count
-            
-        except Exception as e:
-            logger.error("Error handling start command", error=str(e))
-            await self._handle_command_error(message, "start", str(e))
     
     async def handle_help(self, message: Message, state: FSMContext) -> None:
         """Handle /help command."""
@@ -533,6 +546,404 @@ class TelegramHandlers:
             # Record security incident if this looks like an attack
             if await self._is_potential_attack(e):
                 await self._record_security_incident(message.from_user.id, "message_processing_attack")
+    
+    async def handle_voice_message(self, message: Message, state: FSMContext) -> None:
+        """
+        Handle voice messages with comprehensive speech processing.
+        
+        Uses the integrated voice processing service for:
+        - Voice message download and conversion
+        - Speech-to-text transcription with OpenAI Whisper
+        - Intelligent AI response generation
+        - Optional voice response synthesis
+        - Performance optimization targeting <2s processing
+        """
+        processing_start_time = time.time()
+        processing_message = None
+        
+        try:
+            # Show initial processing indicator
+            processing_message = await message.reply(self.templates['voice_processing'])
+            
+            # Get user session for preferences and context
+            session = await self.session_manager.get_session_by_user_chat(
+                message.from_user.id, message.chat.id
+            )
+            
+            if not session:
+                session = await self.session_manager.get_or_create_session(
+                    user_id=message.from_user.id,
+                    chat_id=message.chat.id
+                )
+            
+            # Risk assessment for voice processing
+            risk_level, risk_score, risk_factors = await self.anti_ban.assess_risk_level(
+                user_id=message.from_user.id,
+                action="voice_message",
+                context={
+                    'voice_duration': message.voice.duration,
+                    'file_size': message.voice.file_size,
+                    'session_mode': session.conversation_mode.value
+                }
+            )
+            
+            # Prepare user preferences from session
+            user_preferences = {
+                'language': None,
+                'voice_responses_enabled': True  # Default to enabled
+            }
+            
+            if hasattr(session, 'user_profile') and session.user_profile:
+                user_preferences['language'] = getattr(session.user_profile, 'language_code', None)
+                user_preferences['voice_responses_enabled'] = getattr(
+                    session.user_profile, 'voice_responses_enabled', True
+                )
+            
+            # Get Redis client for caching
+            redis_client = None
+            try:
+                from ..core.redis import get_redis_client
+                redis_client = await get_redis_client()
+            except Exception:
+                logger.debug("Redis client not available, proceeding without caching")
+            
+            # Process voice message using integrated service
+            voice_service = await get_voice_integration_service(
+                redis_client=redis_client,
+                enable_caching=True
+            )
+            
+            # Determine if we should generate voice response
+            should_generate_voice = await self._should_generate_voice_response(
+                session, risk_level, 500  # Assume reasonable response length
+            )
+            
+            # Process the complete voice message
+            result = await voice_service.process_voice_message_complete(
+                bot=message.bot,
+                voice_message=message.voice,
+                user_id=message.from_user.id,
+                chat_id=message.chat.id,
+                user_preferences=user_preferences,
+                generate_voice_response=should_generate_voice
+            )
+            
+            if result['success']:
+                # Extract transcription results
+                transcription = result['transcription']
+                transcribed_text = transcription['text']
+                detected_language = transcription['language']
+                confidence = transcription.get('confidence')
+                
+                logger.info(
+                    "Voice message processed successfully",
+                    user_id=message.from_user.id,
+                    text_length=len(transcribed_text),
+                    language=detected_language,
+                    confidence=confidence,
+                    total_time=result['total_processing_time'],
+                    has_voice_response=bool(result.get('voice_response'))
+                )
+                
+                if not transcribed_text.strip():
+                    await processing_message.edit_text(
+                        "🎤 I heard your voice message but couldn't understand what was said. Could you try again or send a text message?"
+                    )
+                    return
+                
+                # Generate intelligent text response
+                response_text = await self._generate_response(
+                    text=transcribed_text,
+                    session=session,
+                    message=message
+                )
+                
+                # Send appropriate response based on what was generated
+                if 'voice_response' in result and result['voice_response']['success']:
+                    # Send voice response
+                    voice_response = result['voice_response']
+                    voice_file_path = voice_response['voice_file_path']
+                    
+                    try:
+                        with open(voice_file_path, 'rb') as voice_file:
+                            await message.reply_voice(
+                                voice=voice_file,
+                                caption=f"💬 *I heard:* \"{transcribed_text}\"\n\n📝 *Response:* {response_text}",
+                                parse_mode='Markdown'
+                            )
+                        
+                        # Delete processing message
+                        await processing_message.delete()
+                        processing_message = None
+                        
+                        logger.info(
+                            "Voice response sent successfully",
+                            user_id=message.from_user.id,
+                            voice_duration=voice_response.get('duration'),
+                            response_length=len(response_text)
+                        )
+                        
+                    except Exception as e:
+                        logger.warning("Failed to send voice response, sending text", error=str(e))
+                        await processing_message.edit_text(
+                            f"💬 *I heard:* \"{transcribed_text}\"\n\n🤖 *Response:* {response_text}",
+                            parse_mode='Markdown'
+                        )
+                else:
+                    # Send text response
+                    await processing_message.edit_text(
+                        f"💬 *I heard:* \"{transcribed_text}\"\n\n🤖 *Response:* {response_text}",
+                        parse_mode='Markdown'
+                    )
+                
+                # Update session with voice processing context
+                context = MessageContext(
+                    message_id=message.message_id,
+                    timestamp=time.time(),
+                    message_type='voice',
+                    content_type='voice',
+                    text_length=len(transcribed_text),
+                    has_entities=False,
+                    has_media=True,
+                    is_command=False,
+                    command_name=None,
+                    reply_to_message_id=message.reply_to_message.message_id if message.reply_to_message else None
+                )
+                
+                await self.session_manager.update_session_activity(
+                    session.session_id,
+                    message_context=context,
+                    context_updates={
+                        'last_voice_duration': result['voice_metadata'].get('original_duration', 0),
+                        'last_transcription': transcribed_text,
+                        'voice_language': detected_language,
+                        'transcription_confidence': confidence,
+                        'voice_processing_time': result['total_processing_time']
+                    }
+                )
+                
+            else:
+                # Handle processing failure
+                error_msg = result.get('error', 'Unknown error')
+                error_type = result.get('error_type', 'processing_error')
+                
+                logger.error(
+                    "Voice message processing failed",
+                    user_id=message.from_user.id,
+                    error=error_msg,
+                    error_type=error_type,
+                    processing_time=result.get('processing_time', 0)
+                )
+                
+                # Show user-friendly error message
+                if error_type == 'VoiceProcessingError':
+                    await processing_message.edit_text(
+                        self.templates['voice_error'] + " (Audio processing failed)"
+                    )
+                elif error_type == 'WhisperError':
+                    await processing_message.edit_text(
+                        self.templates['voice_error'] + " (Speech recognition failed)"
+                    )
+                else:
+                    await processing_message.edit_text(
+                        self.templates['voice_error'] + " (Please try again)"
+                    )
+            
+            # Record metrics
+            total_processing_time = time.time() - processing_start_time
+            
+            await self.metrics.record_message_received(
+                message_type="voice",
+                processing_time=total_processing_time
+            )
+            
+            await self.metrics.record_user_activity(
+                user_id=message.from_user.id,
+                language_code=result.get('transcription', {}).get('language') or message.from_user.language_code
+            )
+            
+        except Exception as e:
+            logger.error(
+                "Voice message handling failed with unexpected error", 
+                error=str(e), 
+                user_id=message.from_user.id,
+                exc_info=True
+            )
+            
+            try:
+                if processing_message:
+                    await processing_message.edit_text(self.templates['voice_error'])
+                else:
+                    await message.reply(self.templates['voice_error'])
+            except Exception:
+                # If we can't even send an error message, just log it
+                logger.error("Failed to send error message to user", user_id=message.from_user.id)
+    
+    async def handle_audio_message(self, message: Message, state: FSMContext) -> None:
+        """
+        Handle uploaded audio files (longer audio content).
+        
+        Supports audio files with reasonable size and duration limits,
+        processing them through the same voice integration pipeline.
+        """
+        try:
+            # Check if audio file is within processing limits
+            if message.audio.duration and message.audio.duration > 600:  # 10 minutes
+                await message.reply(
+                    "🎵 Your audio file is quite long! For better results, please send shorter clips (under 10 minutes) or break it into smaller parts."
+                )
+                return
+            
+            if message.audio.file_size and message.audio.file_size > 50 * 1024 * 1024:  # 50MB
+                await message.reply(
+                    "📁 Your audio file is too large. Please send files smaller than 50MB."
+                )
+                return
+            
+            # Inform user about audio processing
+            processing_msg = await message.reply(
+                "🎵 Processing your audio file... This may take a moment for longer recordings."
+            )
+            
+            # Create a compatible voice message object for the integration service
+            class AudioAsVoice:
+                def __init__(self, audio):
+                    self.file_id = audio.file_id
+                    self.duration = audio.duration or 0
+                    self.file_size = audio.file_size or 0
+            
+            # Use the voice integration service directly
+            try:
+                # Get user session for preferences
+                session = await self.session_manager.get_session_by_user_chat(
+                    message.from_user.id, message.chat.id
+                )
+                
+                if not session:
+                    session = await self.session_manager.get_or_create_session(
+                        user_id=message.from_user.id,
+                        chat_id=message.chat.id
+                    )
+                
+                # Prepare user preferences
+                user_preferences = {
+                    'language': None,
+                    'voice_responses_enabled': False  # Usually disabled for longer audio
+                }
+                
+                if hasattr(session, 'user_profile') and session.user_profile:
+                    user_preferences['language'] = getattr(session.user_profile, 'language_code', None)
+                
+                # Get voice integration service
+                voice_service = await get_voice_integration_service()
+                
+                # Process the audio file as a voice message
+                audio_voice = AudioAsVoice(message.audio)
+                result = await voice_service.process_voice_message_complete(
+                    bot=message.bot,
+                    voice_message=audio_voice,
+                    user_id=message.from_user.id,
+                    chat_id=message.chat.id,
+                    user_preferences=user_preferences,
+                    generate_voice_response=False  # Don't generate voice for long audio
+                )
+                
+                # Delete processing message
+                await processing_msg.delete()
+                
+                if result['success']:
+                    transcription = result['transcription']
+                    transcribed_text = transcription['text']
+                    detected_language = transcription['language']
+                    duration = transcription.get('duration', 0)
+                    
+                    # Generate intelligent text response
+                    response_text = await self._generate_response(
+                        text=transcribed_text,
+                        session=session,
+                        message=message
+                    )
+                    
+                    # Send comprehensive response for audio files
+                    response_msg = f"🎵 **Audio Transcription** ({duration:.1f}s)\n\n"
+                    response_msg += f"💬 *Transcribed text:*\n{transcribed_text}\n\n"
+                    response_msg += f"🤖 *My response:*\n{response_text}"
+                    
+                    if detected_language:
+                        response_msg += f"\n\n🌍 *Language:* {detected_language}"
+                    
+                    await message.reply(
+                        response_msg,
+                        parse_mode='Markdown'
+                    )
+                    
+                    logger.info(
+                        "Audio file processed successfully",
+                        user_id=message.from_user.id,
+                        duration=duration,
+                        text_length=len(transcribed_text),
+                        language=detected_language
+                    )
+                    
+                else:
+                    # Handle processing failure
+                    error_msg = result.get('error', 'Unknown error')
+                    await message.reply(
+                        f"❌ Sorry, I couldn't process your audio file: {error_msg}"
+                    )
+                    
+            except Exception as e:
+                await processing_msg.delete()
+                logger.error("Audio processing failed", error=str(e), user_id=message.from_user.id)
+                await message.reply(
+                    "❌ Sorry, I encountered an error while processing your audio file. Please try again with a shorter clip or different format."
+                )
+                
+        except Exception as e:
+            logger.error("Audio message handling failed", error=str(e), user_id=message.from_user.id)
+            await message.reply(
+                "❌ Sorry, I couldn't process your audio file. Please try again or send a shorter clip."
+            )
+    
+    async def _should_generate_voice_response(
+        self,
+        session,
+        risk_level: RiskLevel,
+        response_length: int
+    ) -> bool:
+        """
+        Determine whether to generate a voice response based on user preferences and context.
+        """
+        try:
+            # Don't generate voice for high-risk interactions
+            if risk_level in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
+                return False
+            
+            # Don't generate voice for very long responses (over 500 characters)
+            if response_length > 500:
+                return False
+            
+            # Check user preferences (this would be stored in user profile)
+            if hasattr(session, 'user_profile') and session.user_profile:
+                voice_responses_enabled = getattr(
+                    session.user_profile, 
+                    'voice_responses_enabled', 
+                    True  # Default to enabled
+                )
+                if not voice_responses_enabled:
+                    return False
+            
+            # Check if it's a reasonable time for voice responses
+            # (could be based on user timezone, but keeping simple for now)
+            current_hour = time.localtime().tm_hour
+            if current_hour < 7 or current_hour > 22:  # Quiet hours
+                return False
+            
+            return True
+            
+        except Exception as e:
+            logger.warning("Error determining voice response preference", error=str(e))
+            return False
     
     async def _is_potential_attack(self, exception: Exception) -> bool:
         """Determine if exception indicates potential attack."""
@@ -1228,7 +1639,7 @@ Use the buttons below to modify your settings.
 async def setup_handlers(dp: "Dispatcher", bot) -> None:
     """Setup message handlers with the dispatcher."""
     try:
-        # Initialize handlers
+        # Initialize private chat handlers
         handlers = TelegramHandlers(bot)
         
         # Set component references
@@ -1237,10 +1648,14 @@ async def setup_handlers(dp: "Dispatcher", bot) -> None:
         handlers.metrics = bot.metrics
         handlers.rate_limiter = bot.rate_limiter
         
-        # Include router
+        # Include private chat router
         dp.include_router(handlers.router)
         
-        logger.info("Telegram handlers setup completed")
+        # Setup group handlers
+        from .group_handlers import setup_group_handlers
+        await setup_group_handlers(dp, bot)
+        
+        logger.info("All Telegram handlers setup completed")
         
     except Exception as e:
         logger.error("Failed to setup handlers", error=str(e))

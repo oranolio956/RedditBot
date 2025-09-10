@@ -166,7 +166,13 @@ class TelegramRateLimitMiddleware(BaseMiddleware):
             
         except Exception as e:
             logger.error("Rate limiting middleware error", error=str(e))
-            self.metrics.error_updates += 1\n            \n            # Emergency mode activation on repeated failures\n            await self._handle_middleware_error()\n            \n            # Allow the request to proceed on error\n            return await handler(event, data)
+            self.metrics.error_updates += 1
+            
+            # Emergency mode activation on repeated failures
+            await self._handle_middleware_error()
+            
+            # Allow the request to proceed on error
+            return await handler(event, data)
     
     def _extract_user_id(self, event: TelegramObject) -> Optional[int]:
         """Extract user ID from Telegram event."""
@@ -633,3 +639,14 @@ async def reset_emergency_mode() -> bool:
     except Exception as e:
         logger.error("Error resetting emergency mode", error=str(e))
         return False
+
+
+def setup_middleware(dp):
+    """Setup middleware for the bot dispatcher."""
+    try:
+        # Add rate limiting middleware
+        dp.middleware.setup(telegram_rate_limit_middleware)
+        logger.info("Middleware setup completed")
+    except Exception as e:
+        logger.error("Error setting up middleware", error=str(e))
+        raise

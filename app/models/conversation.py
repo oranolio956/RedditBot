@@ -437,7 +437,7 @@ class Message(FullAuditModel):
     )
     
     # Message metadata
-    metadata = Column(
+    message_metadata = Column(
         JSONB,
         nullable=True,
         default=dict,
@@ -589,7 +589,5 @@ class Message(FullAuditModel):
         )
 
 
-# Update User model to include relationships
-User.conversation_sessions = relationship("ConversationSession", back_populates="user", cascade="all, delete-orphan")
-User.conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
-User.messages = relationship("Message", back_populates="user", cascade="all, delete-orphan")
+# User model relationships are defined in the User model itself
+# to avoid circular import issues

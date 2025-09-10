@@ -5,6 +5,8 @@ Implements the Repository pattern for data access with advanced querying,
 caching, and transaction management capabilities.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union, Type, Generic, TypeVar, Callable
 from datetime import datetime, timedelta
@@ -110,7 +112,7 @@ class PaginationParams:
         self.offset = (self.page - 1) * self.size
 
 
-class QueryResult:
+class QueryResult(Generic[T]):
     """Query result with pagination metadata."""
     
     def __init__(self, items: List[T], total: int, pagination: PaginationParams):

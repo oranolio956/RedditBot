@@ -1034,3 +1034,7 @@ class SessionManager:
             
         except Exception as e:
             logger.error("Error during session manager cleanup", error=str(e))
+
+
+# Global session manager instance
+session_manager = SessionManager()

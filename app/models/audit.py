@@ -195,7 +195,7 @@ class AuditLog(BaseModel):
         comment="Values after modification (for data changes)"
     )
     
-    metadata = Column(
+    audit_metadata = Column(
         JSONB,
         nullable=True,
         comment="Additional metadata about the event"

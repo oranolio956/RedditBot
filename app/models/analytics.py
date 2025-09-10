@@ -793,6 +793,7 @@ class SystemMetrics(BaseModel):
 
 
 # Update User and Conversation models to include analytics relationships
-User.activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
-User.conversation_analytics = relationship("ConversationAnalytics", back_populates="user", cascade="all, delete-orphan")
-Conversation.analytics = relationship("ConversationAnalytics", back_populates="conversation", uselist=False, cascade="all, delete-orphan")
+# User model relationships are defined in the User model itself
+# to avoid circular import issues
+# Conversation model relationships are defined in the Conversation model itself
+# to avoid circular import issues

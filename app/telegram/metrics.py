@@ -763,6 +763,9 @@ class TelegramMetrics:
                 await self.redis.close()
             
             logger.info("Telegram metrics cleanup completed")
+            
+        except Exception as e:
+            logger.error("Error during metrics cleanup", error=str(e))
     
     async def _check_and_cleanup_memory(self) -> None:
         """Check memory usage and cleanup if necessary."""

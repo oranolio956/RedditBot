@@ -140,8 +140,11 @@ class User(FullAuditModel):
         comment="Recent interaction patterns for ML"
     )
     
-    # Relationship to conversation sessions
-    # conversations = relationship("Conversation", back_populates="user")
+    # Relationships
+    conversation_sessions = relationship("ConversationSession", back_populates="user", cascade="all, delete-orphan")
+    conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
+    messages = relationship("Message", back_populates="user", cascade="all, delete-orphan")
+    group_memberships = relationship("GroupMember", back_populates="user", cascade="all, delete-orphan")
     
     # Database indexes for performance
     __table_args__ = (

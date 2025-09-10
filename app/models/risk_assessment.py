@@ -368,7 +368,7 @@ class RiskAssessment(FullAuditModel):
         comment="Content that was analyzed"
     )
     
-    metadata = Column(
+    assessment_metadata = Column(
         JSONB,
         nullable=True,
         comment="Additional assessment metadata"
@@ -786,5 +786,7 @@ class ConversationRisk(FullAuditModel):
 
 
 # Update User and Conversation models to include risk relationships
-User.conversation_risks = relationship("ConversationRisk", back_populates="user", cascade="all, delete-orphan")
-Conversation.risk_assessments = relationship("ConversationRisk", back_populates="conversation", cascade="all, delete-orphan")
+# User model relationships are defined in the User model itself
+# to avoid circular import issues
+# Conversation model relationships are defined in the Conversation model itself
+# to avoid circular import issues

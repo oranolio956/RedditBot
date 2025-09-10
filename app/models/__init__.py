@@ -12,6 +12,19 @@ from app.models.risk_assessment import RiskAssessment, RiskFactor, ConversationR
 from app.models.analytics import UserActivity, ConversationAnalytics, SystemMetrics
 from app.models.system_config import SystemConfiguration, FeatureFlag, RateLimitConfig
 from app.models.audit import AuditLog, SecurityEvent, PerformanceMetric
+from app.models.engagement import (
+    UserEngagement, UserBehaviorPattern, ProactiveOutreach, 
+    EngagementMilestone, UserMilestoneProgress, EngagementType, 
+    SentimentType, OutreachType, OutreachStatus
+)
+from app.models.group_session import (
+    GroupSession, GroupMember, GroupConversation, GroupAnalytics,
+    GroupType, MemberRole, GroupStatus, MessageFrequency
+)
+from app.models.sharing import (
+    ShareableContent, ContentShare, ReferralProgram, UserReferral,
+    ViralMetrics, ShareableContentType, SocialPlatform
+)
 
 __all__ = [
     # User models
@@ -46,4 +59,34 @@ __all__ = [
     "AuditLog",
     "SecurityEvent",
     "PerformanceMetric",
+    
+    # Engagement models
+    "UserEngagement",
+    "UserBehaviorPattern",
+    "ProactiveOutreach",
+    "EngagementMilestone",
+    "UserMilestoneProgress",
+    "EngagementType",
+    "SentimentType",
+    "OutreachType",
+    "OutreachStatus",
+    
+    # Group models
+    "GroupSession",
+    "GroupMember", 
+    "GroupConversation",
+    "GroupAnalytics",
+    "GroupType",
+    "MemberRole",
+    "GroupStatus", 
+    "MessageFrequency",
+    
+    # Viral sharing models
+    "ShareableContent",
+    "ContentShare",
+    "ReferralProgram",
+    "UserReferral",
+    "ViralMetrics",
+    "ShareableContentType",
+    "SocialPlatform",
 ]

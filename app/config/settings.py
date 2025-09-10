@@ -11,12 +11,14 @@ from pathlib import Path
 from typing import List, Optional, Union
 from functools import lru_cache
 
-from pydantic import Field, validator, AnyHttpUrl
-from pydantic_settings import BaseSettings
+from pydantic import Field, validator, AnyHttpUrl, ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DatabaseSettings(BaseSettings):
     """Database configuration settings."""
+    
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
     
     host: str = Field(default="localhost", env="DB_HOST")
     port: int = Field(default=5432, env="DB_PORT")
@@ -24,11 +26,16 @@ class DatabaseSettings(BaseSettings):
     user: str = Field(default="postgres", env="DB_USER")
     password: str = Field(default="", env="DB_PASSWORD")
     
-    # Connection pool settings for high concurrency
-    pool_size: int = Field(default=20, env="DB_POOL_SIZE")
-    max_overflow: int = Field(default=30, env="DB_MAX_OVERFLOW")
+    # Connection pool settings for high concurrency (1000+ users)
+    pool_size: int = Field(default=100, env="DB_POOL_SIZE")
+    max_overflow: int = Field(default=200, env="DB_MAX_OVERFLOW")
     pool_timeout: int = Field(default=30, env="DB_POOL_TIMEOUT")
     pool_recycle: int = Field(default=3600, env="DB_POOL_RECYCLE")
+    pool_pre_ping: bool = Field(default=True, env="DB_POOL_PRE_PING")
+    
+    # Backup settings
+    backup_dir: str = Field(default="./backups", env="DB_BACKUP_DIR")
+    backup_retention_days: int = Field(default=30, env="DB_BACKUP_RETENTION_DAYS")
     
     @property
     def url(self) -> str:
@@ -43,6 +50,8 @@ class DatabaseSettings(BaseSettings):
 
 class RedisSettings(BaseSettings):
     """Redis configuration for caching, rate limiting, and distributed operations."""
+    
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
     
     # Basic connection settings
     host: str = Field(default="localhost", env="REDIS_HOST")
@@ -60,9 +69,9 @@ class RedisSettings(BaseSettings):
     sentinel_hosts: List[str] = Field(default=[], env="REDIS_SENTINEL_HOSTS")
     sentinel_service_name: str = Field(default="mymaster", env="REDIS_SENTINEL_SERVICE_NAME")
     
-    # Connection pool settings
-    max_connections: int = Field(default=100, env="REDIS_MAX_CONNECTIONS")
-    min_connections: int = Field(default=10, env="REDIS_MIN_CONNECTIONS")
+    # Connection pool settings (increased for 1000+ users)
+    max_connections: int = Field(default=500, env="REDIS_MAX_CONNECTIONS")
+    min_connections: int = Field(default=50, env="REDIS_MIN_CONNECTIONS")
     retry_on_timeout: bool = Field(default=True, env="REDIS_RETRY_ON_TIMEOUT")
     socket_timeout: float = Field(default=30.0, env="REDIS_SOCKET_TIMEOUT")
     socket_connect_timeout: float = Field(default=30.0, env="REDIS_SOCKET_CONNECT_TIMEOUT")
@@ -182,6 +191,8 @@ class RedisSettings(BaseSettings):
 class TelegramSettings(BaseSettings):
     """Telegram Bot API configuration."""
     
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
+    
     bot_token: str = Field(default="test_token", env="TELEGRAM_BOT_TOKEN")
     webhook_url: Optional[str] = Field(default=None, env="TELEGRAM_WEBHOOK_URL")
     webhook_secret: Optional[str] = Field(default=None, env="TELEGRAM_WEBHOOK_SECRET")
@@ -214,6 +225,8 @@ class TelegramSettings(BaseSettings):
 class MLSettings(BaseSettings):
     """Machine Learning model configuration."""
     
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
+    
     model_path: Path = Field(default=Path("models"), env="ML_MODEL_PATH")
     device: str = Field(default="cpu", env="ML_DEVICE")  # cpu, cuda, mps
     batch_size: int = Field(default=32, env="ML_BATCH_SIZE")
@@ -236,6 +249,8 @@ class MLSettings(BaseSettings):
 
 class SecuritySettings(BaseSettings):
     """Enhanced security and authentication settings."""
+    
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
     
     secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
     jwt_secret: str = Field(default="dev-jwt-secret-change-in-production", env="JWT_SECRET_KEY")
@@ -332,6 +347,8 @@ class SecuritySettings(BaseSettings):
 class MonitoringSettings(BaseSettings):
     """Monitoring, logging, and observability settings."""
     
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
+    
     # Logging
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     log_format: str = Field(default="json", env="LOG_FORMAT")  # json, text
@@ -350,6 +367,8 @@ class MonitoringSettings(BaseSettings):
 
 class CelerySettings(BaseSettings):
     """Celery task queue configuration."""
+    
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
     
     broker_url: str = Field(default="redis://localhost:6379/1", env="CELERY_BROKER_URL")
     result_backend: str = Field(default="redis://localhost:6379/2", env="CELERY_RESULT_BACKEND")
@@ -371,10 +390,17 @@ class CelerySettings(BaseSettings):
 class StripeSettings(BaseSettings):
     """Stripe payment processing configuration."""
     
+    model_config = SettingsConfigDict(
+        env_file=".env", 
+        case_sensitive=False, 
+        extra='ignore',
+        env_prefix="STRIPE_"
+    )
+    
     # API Keys
-    publishable_key: str = Field(default="pk_test_...", env="STRIPE_PUBLISHABLE_KEY")
-    secret_key: str = Field(default="sk_test_...", env="STRIPE_SECRET_KEY")
-    webhook_secret: str = Field(default="whsec_test_...", env="STRIPE_WEBHOOK_SECRET")
+    publishable_key: str = Field(default="pk_test_...", alias="STRIPE_PUBLISHABLE_KEY")
+    secret_key: str = Field(default="sk_test_...", alias="STRIPE_SECRET_KEY") 
+    webhook_secret: str = Field(default="whsec_test_...", alias="STRIPE_WEBHOOK_SECRET")
     
     # API Configuration
     api_version: str = Field(default="2023-10-16", env="STRIPE_API_VERSION")
@@ -447,8 +473,91 @@ class StripeSettings(BaseSettings):
         return v
 
 
+class VoiceProcessingSettings(BaseSettings):
+    """Voice processing and TTS configuration."""
+    
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
+    
+    # OpenAI Whisper API settings
+    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
+    whisper_model: str = Field(default="whisper-1", env="WHISPER_MODEL")
+    whisper_language: Optional[str] = Field(default=None, env="WHISPER_DEFAULT_LANGUAGE")  # Auto-detect by default
+    
+    # Audio file limits
+    max_audio_file_size: int = Field(default=25 * 1024 * 1024, env="MAX_AUDIO_FILE_SIZE")  # 25MB
+    max_audio_duration: int = Field(default=600, env="MAX_AUDIO_DURATION")  # 10 minutes
+    max_voice_message_duration: int = Field(default=300, env="MAX_VOICE_MESSAGE_DURATION")  # 5 minutes
+    
+    # Voice processing settings
+    enable_voice_processing: bool = Field(default=True, env="ENABLE_VOICE_PROCESSING")
+    enable_voice_responses: bool = Field(default=True, env="ENABLE_VOICE_RESPONSES")
+    optimize_for_speech: bool = Field(default=True, env="OPTIMIZE_FOR_SPEECH")
+    voice_processing_timeout: int = Field(default=30, env="VOICE_PROCESSING_TIMEOUT")  # 30 seconds
+    
+    # TTS (Text-to-Speech) settings
+    tts_default_language: str = Field(default="en", env="TTS_DEFAULT_LANGUAGE")
+    tts_max_text_length: int = Field(default=5000, env="TTS_MAX_TEXT_LENGTH")
+    tts_slow_speech: bool = Field(default=False, env="TTS_SLOW_SPEECH")
+    tts_chunk_long_text: bool = Field(default=True, env="TTS_CHUNK_LONG_TEXT")
+    
+    # Voice response preferences
+    voice_response_max_length: int = Field(default=500, env="VOICE_RESPONSE_MAX_LENGTH")  # chars
+    voice_quiet_hours_start: int = Field(default=22, env="VOICE_QUIET_HOURS_START")  # 10 PM
+    voice_quiet_hours_end: int = Field(default=7, env="VOICE_QUIET_HOURS_END")  # 7 AM
+    enable_voice_in_groups: bool = Field(default=False, env="ENABLE_VOICE_IN_GROUPS")  # Usually disabled for groups
+    
+    # Caching settings
+    enable_transcription_cache: bool = Field(default=True, env="ENABLE_TRANSCRIPTION_CACHE")
+    enable_tts_cache: bool = Field(default=True, env="ENABLE_TTS_CACHE")
+    transcription_cache_ttl: int = Field(default=3600 * 24, env="TRANSCRIPTION_CACHE_TTL")  # 24 hours
+    tts_cache_ttl: int = Field(default=3600 * 24 * 7, env="TTS_CACHE_TTL")  # 7 days
+    
+    # Performance settings
+    target_processing_time: float = Field(default=2.0, env="TARGET_PROCESSING_TIME")  # 2 seconds
+    max_concurrent_voice_processing: int = Field(default=10, env="MAX_CONCURRENT_VOICE_PROCESSING")
+    voice_processor_temp_dir: Optional[str] = Field(default=None, env="VOICE_PROCESSOR_TEMP_DIR")
+    
+    # Audio quality settings
+    output_sample_rate: int = Field(default=16000, env="OUTPUT_SAMPLE_RATE")  # 16kHz for speech
+    output_bitrate: str = Field(default="64k", env="OUTPUT_BITRATE")  # Good for voice messages
+    enable_audio_compression: bool = Field(default=True, env="ENABLE_AUDIO_COMPRESSION")
+    
+    # Error handling and fallbacks
+    enable_fallback_tts: bool = Field(default=True, env="ENABLE_FALLBACK_TTS")
+    max_transcription_retries: int = Field(default=3, env="MAX_TRANSCRIPTION_RETRIES")
+    enable_speech_recognition_fallback: bool = Field(default=False, env="ENABLE_SPEECH_RECOGNITION_FALLBACK")
+    
+    # Monitoring and metrics
+    enable_voice_metrics: bool = Field(default=True, env="ENABLE_VOICE_METRICS")
+    log_voice_processing_stats: bool = Field(default=True, env="LOG_VOICE_PROCESSING_STATS")
+    
+    # Security settings
+    validate_audio_content: bool = Field(default=True, env="VALIDATE_AUDIO_CONTENT")
+    scan_for_malicious_audio: bool = Field(default=True, env="SCAN_FOR_MALICIOUS_AUDIO")
+    
+    @validator("max_audio_file_size")
+    def validate_file_size(cls, v):
+        if v > 100 * 1024 * 1024:  # 100MB absolute max
+            raise ValueError("Max audio file size cannot exceed 100MB")
+        return v
+    
+    @validator("voice_quiet_hours_start")
+    def validate_quiet_hours_start(cls, v):
+        if not 0 <= v <= 23:
+            raise ValueError("Quiet hours start must be between 0 and 23")
+        return v
+    
+    @validator("voice_quiet_hours_end")
+    def validate_quiet_hours_end(cls, v):
+        if not 0 <= v <= 23:
+            raise ValueError("Quiet hours end must be between 0 and 23")
+        return v
+
+
 class AdvancedTypingSettings(BaseSettings):
     """Advanced Typing Simulator configuration."""
+    
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
     
     # Core typing system settings
     enable_advanced_typing: bool = Field(default=True, env="ENABLE_ADVANCED_TYPING")
@@ -518,6 +627,13 @@ class AdvancedTypingSettings(BaseSettings):
 class Settings(BaseSettings):
     """Main application settings combining all configuration sections."""
     
+    model_config = SettingsConfigDict(
+        env_file=".env", 
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra='ignore'  # Allow extra fields to be ignored instead of causing validation errors
+    )
+    
     # Environment
     environment: str = Field(default="development", env="ENVIRONMENT")
     debug: bool = Field(default=False, env="DEBUG")
@@ -534,20 +650,16 @@ class Settings(BaseSettings):
     workers: int = Field(default=1, env="WORKERS")
     
     # Configuration sections
-    database: DatabaseSettings = DatabaseSettings()
-    redis: RedisSettings = RedisSettings()
-    stripe: StripeSettings = StripeSettings()
-    advanced_typing: AdvancedTypingSettings = AdvancedTypingSettings()
-    telegram: TelegramSettings = TelegramSettings()
-    ml: MLSettings = MLSettings()
-    security: SecuritySettings = SecuritySettings()
-    monitoring: MonitoringSettings = MonitoringSettings()
-    celery: CelerySettings = CelerySettings()
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
+    stripe: StripeSettings = Field(default_factory=StripeSettings)
+    advanced_typing: AdvancedTypingSettings = Field(default_factory=AdvancedTypingSettings)
+    voice_processing: VoiceProcessingSettings = Field(default_factory=VoiceProcessingSettings)
+    telegram: TelegramSettings = Field(default_factory=TelegramSettings)
+    ml: MLSettings = Field(default_factory=MLSettings)
+    security: SecuritySettings = Field(default_factory=SecuritySettings)
+    monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+    celery: CelerySettings = Field(default_factory=CelerySettings)
     
     @property
     def is_development(self) -> bool:

@@ -286,10 +286,10 @@ class DatabaseBackupManager:
     """Database backup and recovery management."""
     
     def __init__(self):
-        self.backup_dir = Path(settings.database.get('backup_dir', './backups'))
+        self.backup_dir = Path(settings.database.backup_dir)
         self.backup_dir.mkdir(exist_ok=True)
         
-        self.retention_days = settings.database.get('backup_retention_days', 30)
+        self.retention_days = settings.database.backup_retention_days
         self.compression_enabled = True
     
     async def create_backup(self, backup_type: str = 'full') -> Dict[str, Any]:

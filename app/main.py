@@ -26,6 +26,8 @@ from app.api.v1 import router as api_v1_router
 from app.middleware.rate_limiting import RateLimitMiddleware
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.error_handling import ErrorHandlingMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware, RateLimitSecurityMiddleware
+from app.middleware.input_validation import InputValidationMiddleware
 from app.telegram.bot import get_bot, cleanup_bot
 
 # Configure structured logging
@@ -129,6 +131,35 @@ app = FastAPI(
 
 # Error handling middleware (outermost)
 app.add_middleware(ErrorHandlingMiddleware)
+
+# Input validation middleware
+if settings.security.enable_input_sanitization:
+    app.add_middleware(
+        InputValidationMiddleware,
+        max_request_size=settings.security.max_request_size,
+        max_json_size=settings.security.max_json_size,
+        max_string_length=settings.security.max_message_length,
+        enable_sql_injection_detection=True,
+        enable_xss_detection=True,
+        enable_command_injection_detection=True,
+        enable_path_traversal_detection=True
+    )
+
+# Security headers middleware
+if settings.security.enable_security_headers:
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        hsts_max_age=settings.security.hsts_max_age,
+        enable_hsts=settings.is_production
+    )
+
+# Security-focused rate limiting middleware
+app.add_middleware(
+    RateLimitSecurityMiddleware,
+    suspicious_threshold=settings.security.rate_limit_per_ip_per_minute * 2,
+    block_duration=settings.security.block_duration,
+    enable_progressive_delays=True
+)
 
 # Request logging middleware
 app.add_middleware(RequestLoggingMiddleware)

@@ -173,7 +173,7 @@ class StripeCustomer(FullAuditModel):
     )
     
     # Metadata
-    metadata = Column(
+    stripe_metadata = Column(
         JSONB,
         default=dict,
         nullable=True,
@@ -374,7 +374,7 @@ class StripeSubscription(FullAuditModel):
     )
     
     # Metadata
-    metadata = Column(
+    stripe_metadata = Column(
         JSONB,
         default=dict,
         nullable=True,
@@ -545,7 +545,7 @@ class StripePaymentMethod(FullAuditModel):
     )
     
     # Metadata
-    metadata = Column(
+    stripe_metadata = Column(
         JSONB,
         default=dict,
         nullable=True,
@@ -763,7 +763,7 @@ class StripeInvoice(FullAuditModel):
     )
     
     # Metadata
-    metadata = Column(
+    stripe_metadata = Column(
         JSONB,
         default=dict,
         nullable=True,
@@ -936,7 +936,7 @@ class PaymentAttempt(FullAuditModel):
     )
     
     # Metadata
-    metadata = Column(
+    stripe_metadata = Column(
         JSONB,
         default=dict,
         nullable=True,
