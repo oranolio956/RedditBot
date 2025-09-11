@@ -8,13 +8,7 @@ import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/store';
 import {
   User,
-  CognitiveProfile,
   MemoryPalace,
-  EmotionalProfile,
-  TelegramBotStatus,
-  QuantumNetwork,
-  SynestheticProfile,
-  DreamSession,
 } from '@/types';
 
 // Query keys for consistent caching

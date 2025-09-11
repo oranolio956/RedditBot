@@ -3,7 +3,7 @@
  * Apple-inspired error page with consciousness theme
  */
 
-import React from 'react';
+
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { HomeIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';

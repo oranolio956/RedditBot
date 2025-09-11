@@ -5,7 +5,6 @@
 
 import { io, Socket } from 'socket.io-client';
 import {
-  WebSocketMessage,
   ConsciousnessUpdate,
   MetricsUpdate,
   EmotionalStateUpdate,

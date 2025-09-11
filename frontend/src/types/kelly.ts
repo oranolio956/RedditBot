@@ -559,6 +559,15 @@ export interface SafetyAlert extends KellyWebSocketMessage {
     requires_immediate_action: boolean;
     suggested_actions: string[];
   };
+  // Direct properties for easier access in components
+  id: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  alert_type: string;
+  description: string;
+  conversation_id?: string;
+  account_id?: string;
+  requires_immediate_action: boolean;
+  suggested_actions?: string[];
 }
 
 // Payment and Monetization

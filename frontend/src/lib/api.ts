@@ -3,7 +3,7 @@
  * Comprehensive client for all 220+ backend endpoints
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import {
   User,
   CognitiveProfile,

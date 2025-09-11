@@ -3,7 +3,7 @@
  * Dropdown menu for user actions and account management
  */
 
-import React from 'react';
+
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {

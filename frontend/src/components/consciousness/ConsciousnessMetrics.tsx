@@ -3,7 +3,7 @@
  * Real-time display of consciousness state indicators
  */
 
-// import React from 'react';
+// 
 import { motion } from 'framer-motion';
 import { formatRelativeTime, getConsciousnessColor } from '@/lib/utils';
 

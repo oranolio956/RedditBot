@@ -465,6 +465,203 @@ class WebSocketManager:
                 logger.error(f"Cleanup task error: {str(e)}")
                 await asyncio.sleep(120)
     
+    # Kelly AI Monitoring WebSocket Methods
+    
+    async def broadcast_to_room(self, room: str, message: Dict[str, Any]) -> int:
+        """Broadcast message to a specific room (topic)"""
+        return await self.broadcast_to_topic(room, "room_message", message)
+    
+    async def join_monitoring_room(self, connection_id: str, room_type: str) -> bool:
+        """Join a monitoring room (dashboard, alerts, interventions, etc.)"""
+        if connection_id not in self.connections:
+            return False
+        
+        # Kelly monitoring rooms
+        room_name = f"kelly_monitoring_{room_type}"
+        return await self.subscribe_to_topic(connection_id, room_name)
+    
+    async def leave_monitoring_room(self, connection_id: str, room_type: str) -> bool:
+        """Leave a monitoring room"""
+        if connection_id not in self.connections:
+            return False
+        
+        room_name = f"kelly_monitoring_{room_type}"
+        return await self.unsubscribe_from_topic(connection_id, room_name)
+    
+    async def broadcast_metrics_update(self, metrics_data: Dict[str, Any]):
+        """Broadcast live metrics to monitoring dashboard"""
+        message = {
+            "type": "metrics_update",
+            "data": metrics_data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.broadcast_to_room("monitoring_dashboard", message)
+    
+    async def broadcast_activity_update(self, activity_data: Dict[str, Any]):
+        """Broadcast new activity to monitoring dashboard"""
+        message = {
+            "type": "activity_update", 
+            "data": activity_data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.broadcast_to_room("monitoring_dashboard", message)
+        await self.broadcast_to_room("activity_feed", message)
+    
+    async def broadcast_alert_notification(self, alert_data: Dict[str, Any]):
+        """Broadcast alert notification to relevant users"""
+        message = {
+            "type": "alert_notification",
+            "data": alert_data,
+            "timestamp": datetime.utcnow().isoformat(),
+            "severity": alert_data.get("severity", "medium")
+        }
+        
+        # Broadcast to monitoring dashboard
+        await self.broadcast_to_room("monitoring_dashboard", message)
+        
+        # Broadcast to alerts room
+        await self.broadcast_to_room("alerts_monitoring", message)
+        
+        # For critical alerts, broadcast to all connected users
+        if alert_data.get("severity") == "critical":
+            await self.broadcast_to_all("critical_alert", alert_data)
+    
+    async def broadcast_intervention_update(self, intervention_data: Dict[str, Any]):
+        """Broadcast intervention status updates"""
+        message = {
+            "type": "intervention_update",
+            "data": intervention_data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        conversation_id = intervention_data.get("conversation_id")
+        
+        # Broadcast to monitoring dashboard
+        await self.broadcast_to_room("monitoring_dashboard", message)
+        
+        # Broadcast to interventions room
+        await self.broadcast_to_room("interventions_monitoring", message)
+        
+        # Broadcast to specific conversation room if available
+        if conversation_id:
+            await self.broadcast_to_room(f"conversation_{conversation_id}", message)
+    
+    async def broadcast_emergency_notification(self, emergency_data: Dict[str, Any]):
+        """Broadcast emergency notifications to all relevant users"""
+        message = {
+            "type": "emergency_notification",
+            "data": emergency_data,
+            "timestamp": datetime.utcnow().isoformat(),
+            "severity": "critical"
+        }
+        
+        # Broadcast to all monitoring rooms
+        await self.broadcast_to_room("monitoring_dashboard", message)
+        await self.broadcast_to_room("admin_dashboard", message)
+        await self.broadcast_to_room("emergency_monitoring", message)
+        
+        # For system-wide emergencies, notify all connected users
+        if emergency_data.get("type") == "system_wide":
+            await self.broadcast_to_all("system_emergency", emergency_data)
+    
+    async def broadcast_system_health_update(self, health_data: Dict[str, Any]):
+        """Broadcast system health updates"""
+        message = {
+            "type": "system_health_update",
+            "data": health_data,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.broadcast_to_room("monitoring_dashboard", message)
+    
+    async def start_real_time_monitoring_session(self, connection_id: str, session_config: Dict[str, Any]) -> str:
+        """Start a Kelly AI real-time monitoring session"""
+        session_id = str(uuid.uuid4())
+        
+        self.ai_sessions[session_id] = {
+            "type": "kelly_monitoring",
+            "connection_id": connection_id,
+            "config": session_config,
+            "started_at": datetime.utcnow(),
+            "status": "active",
+            "monitored_accounts": session_config.get("accounts", []),
+            "alert_levels": session_config.get("alert_levels", ["medium", "high", "critical"]),
+            "metrics_interval": session_config.get("metrics_interval", 15)  # seconds
+        }
+        
+        # Subscribe to monitoring topics
+        await self.subscribe_to_topic(connection_id, "monitoring_dashboard")
+        
+        # Subscribe to account-specific monitoring if specified
+        for account_id in session_config.get("accounts", []):
+            await self.subscribe_to_topic(connection_id, f"account_monitoring_{account_id}")
+        
+        # Send session started confirmation
+        await self.send_to_connection(connection_id, "monitoring_session_started", {
+            "session_id": session_id,
+            "config": session_config,
+            "available_rooms": [
+                "monitoring_dashboard",
+                "activity_feed", 
+                "alerts_monitoring",
+                "interventions_monitoring",
+                "emergency_monitoring",
+                "performance_monitoring"
+            ]
+        })
+        
+        logger.info(f"Kelly monitoring session started: {session_id}")
+        return session_id
+    
+    async def update_monitoring_subscription(self, connection_id: str, subscription_updates: Dict[str, Any]):
+        """Update monitoring subscriptions for a connection"""
+        if connection_id not in self.connections:
+            return False
+        
+        # Add new subscriptions
+        for room in subscription_updates.get("subscribe", []):
+            await self.subscribe_to_topic(connection_id, f"kelly_monitoring_{room}")
+        
+        # Remove subscriptions
+        for room in subscription_updates.get("unsubscribe", []):
+            await self.unsubscribe_from_topic(connection_id, f"kelly_monitoring_{room}")
+        
+        # Send confirmation
+        await self.send_to_connection(connection_id, "subscription_updated", {
+            "subscribed_rooms": list(self.connections[connection_id].subscribed_topics),
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
+        return True
+    
+    async def get_monitoring_stats(self) -> Dict[str, Any]:
+        """Get Kelly monitoring-specific statistics"""
+        kelly_sessions = [s for s in self.ai_sessions.values() if s["type"] == "kelly_monitoring"]
+        
+        monitoring_rooms = {
+            room: len(subscribers) 
+            for room, subscribers in self.topic_subscribers.items() 
+            if "kelly_monitoring" in room or room in [
+                "monitoring_dashboard", "activity_feed", "alerts_monitoring",
+                "interventions_monitoring", "emergency_monitoring"
+            ]
+        }
+        
+        return {
+            "active_monitoring_sessions": len(kelly_sessions),
+            "monitoring_room_subscribers": monitoring_rooms,
+            "total_monitoring_connections": sum(monitoring_rooms.values()),
+            "session_details": [
+                {
+                    "session_id": sid,
+                    "started_at": session["started_at"].isoformat(),
+                    "monitored_accounts": len(session.get("monitored_accounts", [])),
+                    "connection_id": session["connection_id"]
+                }
+                for sid, session in self.ai_sessions.items()
+                if session["type"] == "kelly_monitoring"
+            ]
+        }
+    
     def get_stats(self) -> Dict[str, Any]:
         """Get WebSocket manager statistics"""
         return {

@@ -41,6 +41,7 @@ class BackgroundTaskManager:
             await self.start_websocket_tasks()
             await self.start_cache_tasks()
             await self.start_monitoring_tasks()
+            await self.start_kelly_monitoring_tasks()  # Kelly AI monitoring
             await self.start_ai_processing_tasks()
             await self.start_cleanup_tasks()
             
@@ -127,6 +128,20 @@ class BackgroundTaskManager:
             
         except Exception as e:
             logger.error(f"Failed to start monitoring tasks: {str(e)}")
+            raise
+    
+    async def start_kelly_monitoring_tasks(self):
+        """Start Kelly AI monitoring tasks"""
+        try:
+            # Initialize Kelly monitoring service
+            from app.services.kelly_monitoring_service import kelly_monitoring_service
+            await kelly_monitoring_service.initialize()
+            
+            # Kelly metrics collection and broadcasting is handled by the service itself
+            logger.info("Kelly monitoring background tasks started")
+            
+        except Exception as e:
+            logger.error(f"Failed to start Kelly monitoring tasks: {str(e)}")
             raise
     
     async def start_ai_processing_tasks(self):

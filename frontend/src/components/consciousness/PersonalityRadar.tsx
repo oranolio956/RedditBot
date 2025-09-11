@@ -3,7 +3,7 @@
  * Visualizes Big Five personality traits in a radar/spider chart
  */
 
-// import React from 'react';
+// 
 import { motion } from 'framer-motion';
 
 interface PersonalityRadarProps {

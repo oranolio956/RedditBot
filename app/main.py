@@ -283,6 +283,257 @@ if settings.telegram.webhook_url:
             raise HTTPException(status_code=500, detail="Webhook processing error")
 
 
+# WebSocket endpoints for Kelly AI monitoring
+
+@app.websocket("/ws/kelly/monitoring")
+async def kelly_monitoring_websocket(websocket: WebSocket, user_id: Optional[int] = None):
+    """
+    WebSocket endpoint for Kelly AI real-time monitoring dashboard.
+    
+    Provides real-time updates for metrics, activities, alerts, and interventions.
+    """
+    try:
+        # Connect to WebSocket manager
+        connection_id = await websocket_manager.connect(websocket, user_id)
+        
+        # Start monitoring session
+        session_config = {
+            "user_id": user_id,
+            "session_type": "monitoring",
+            "alert_levels": ["medium", "high", "critical"],
+            "metrics_interval": 15
+        }
+        
+        session_id = await websocket_manager.start_real_time_monitoring_session(
+            connection_id, session_config
+        )
+        
+        logger.info(f"Kelly monitoring WebSocket connected: {connection_id} (user: {user_id})")
+        
+        try:
+            # Keep connection alive and handle messages
+            while True:
+                try:
+                    # Receive message from client
+                    data = await websocket.receive_text()
+                    message = json.loads(data)
+                    
+                    message_type = message.get("type")
+                    
+                    if message_type == "subscribe":
+                        # Subscribe to additional monitoring rooms
+                        rooms = message.get("rooms", [])
+                        for room in rooms:
+                            await websocket_manager.join_monitoring_room(connection_id, room)
+                    
+                    elif message_type == "unsubscribe":
+                        # Unsubscribe from monitoring rooms
+                        rooms = message.get("rooms", [])
+                        for room in rooms:
+                            await websocket_manager.leave_monitoring_room(connection_id, room)
+                    
+                    elif message_type == "ping":
+                        # Respond to ping
+                        await websocket_manager.send_to_connection(
+                            connection_id, 
+                            "pong", 
+                            {"timestamp": datetime.utcnow().isoformat()}
+                        )
+                    
+                    elif message_type == "get_metrics":
+                        # Send current metrics
+                        from app.services.kelly_monitoring_service import kelly_monitoring_service
+                        metrics = await kelly_monitoring_service.get_live_metrics()
+                        await websocket_manager.send_to_connection(
+                            connection_id,
+                            "metrics_snapshot",
+                            metrics
+                        )
+                    
+                except WebSocketDisconnect:
+                    break
+                except json.JSONDecodeError:
+                    await websocket_manager.send_to_connection(
+                        connection_id,
+                        "error", 
+                        {"message": "Invalid JSON message"}
+                    )
+                except Exception as e:
+                    logger.error(f"Error handling WebSocket message: {e}")
+                    await websocket_manager.send_to_connection(
+                        connection_id,
+                        "error",
+                        {"message": "Message processing error"}
+                    )
+        
+        except WebSocketDisconnect:
+            logger.info(f"Kelly monitoring WebSocket disconnected: {connection_id}")
+        
+        finally:
+            # Clean up connection
+            await websocket_manager.end_ai_session(session_id)
+            await websocket_manager.disconnect(connection_id)
+            
+    except Exception as e:
+        logger.error(f"Kelly monitoring WebSocket error: {e}")
+        try:
+            await websocket.close(code=1011, reason="Internal server error")
+        except:
+            pass
+
+@app.websocket("/ws/kelly/conversation/{conversation_id}")
+async def kelly_conversation_websocket(websocket: WebSocket, conversation_id: str, user_id: Optional[int] = None):
+    """
+    WebSocket endpoint for monitoring a specific Kelly AI conversation.
+    
+    Provides real-time updates for a specific conversation including
+    interventions, AI confidence changes, and safety alerts.
+    """
+    try:
+        # Connect to WebSocket manager
+        connection_id = await websocket_manager.connect(websocket, user_id)
+        
+        # Subscribe to conversation-specific updates
+        await websocket_manager.subscribe_to_topic(connection_id, f"conversation_{conversation_id}")
+        await websocket_manager.subscribe_to_topic(connection_id, f"intervention_{conversation_id}")
+        
+        logger.info(f"Kelly conversation WebSocket connected: {connection_id} (conversation: {conversation_id})")
+        
+        try:
+            # Send initial conversation status
+            from app.core.redis import redis_manager
+            conv_key = f"kelly:conversation_track:{conversation_id}"
+            conversation_data = await redis_manager.get(conv_key)
+            
+            if conversation_data:
+                await websocket_manager.send_to_connection(
+                    connection_id,
+                    "conversation_status",
+                    json.loads(conversation_data)
+                )
+            
+            # Keep connection alive and handle messages
+            while True:
+                try:
+                    data = await websocket.receive_text()
+                    message = json.loads(data)
+                    
+                    message_type = message.get("type")
+                    
+                    if message_type == "get_status":
+                        # Send current conversation status
+                        conversation_data = await redis_manager.get(conv_key)
+                        if conversation_data:
+                            await websocket_manager.send_to_connection(
+                                connection_id,
+                                "conversation_status",
+                                json.loads(conversation_data)
+                            )
+                    
+                    elif message_type == "get_intervention_status":
+                        # Send intervention status
+                        intervention_key = f"kelly:intervention:{conversation_id}"
+                        intervention_data = await redis_manager.get(intervention_key)
+                        
+                        status = "ai_active"
+                        if intervention_data:
+                            intervention = json.loads(intervention_data)
+                            status = intervention.get("status", "unknown")
+                        
+                        await websocket_manager.send_to_connection(
+                            connection_id,
+                            "intervention_status",
+                            {"status": status, "conversation_id": conversation_id}
+                        )
+                    
+                except WebSocketDisconnect:
+                    break
+                except Exception as e:
+                    logger.error(f"Error handling conversation WebSocket message: {e}")
+        
+        except WebSocketDisconnect:
+            logger.info(f"Kelly conversation WebSocket disconnected: {connection_id}")
+        
+        finally:
+            await websocket_manager.disconnect(connection_id)
+            
+    except Exception as e:
+        logger.error(f"Kelly conversation WebSocket error: {e}")
+        try:
+            await websocket.close(code=1011, reason="Internal server error")
+        except:
+            pass
+
+@app.websocket("/ws/kelly/alerts")
+async def kelly_alerts_websocket(websocket: WebSocket, user_id: Optional[int] = None):
+    """
+    WebSocket endpoint for real-time alert notifications.
+    
+    Provides immediate notifications for new alerts, alert status changes,
+    and escalations in the Kelly AI system.
+    """
+    try:
+        connection_id = await websocket_manager.connect(websocket, user_id)
+        
+        # Subscribe to alert updates
+        await websocket_manager.subscribe_to_topic(connection_id, "alerts_monitoring")
+        await websocket_manager.subscribe_to_topic(connection_id, "monitoring_dashboard")
+        
+        logger.info(f"Kelly alerts WebSocket connected: {connection_id} (user: {user_id})")
+        
+        try:
+            while True:
+                try:
+                    data = await websocket.receive_text()
+                    message = json.loads(data)
+                    
+                    message_type = message.get("type")
+                    
+                    if message_type == "get_active_alerts":
+                        # Send current active alerts
+                        from app.core.redis import redis_manager
+                        alert_keys = await redis_manager.keys("kelly:alert:active:*")
+                        
+                        alerts = []
+                        for key in alert_keys[:20]:  # Limit to 20 most recent
+                            alert_data = await redis_manager.get(key)
+                            if alert_data:
+                                alerts.append(json.loads(alert_data))
+                        
+                        await websocket_manager.send_to_connection(
+                            connection_id,
+                            "active_alerts",
+                            {"alerts": alerts, "count": len(alerts)}
+                        )
+                    
+                    elif message_type == "alert_filter":
+                        # Update alert filtering preferences
+                        filters = message.get("filters", {})
+                        # Store user preferences (implementation depends on requirements)
+                        await websocket_manager.send_to_connection(
+                            connection_id,
+                            "filter_updated",
+                            {"filters": filters}
+                        )
+                    
+                except WebSocketDisconnect:
+                    break
+                except Exception as e:
+                    logger.error(f"Error handling alerts WebSocket message: {e}")
+        
+        except WebSocketDisconnect:
+            logger.info(f"Kelly alerts WebSocket disconnected: {connection_id}")
+        
+        finally:
+            await websocket_manager.disconnect(connection_id)
+            
+    except Exception as e:
+        logger.error(f"Kelly alerts WebSocket error: {e}")
+        try:
+            await websocket.close(code=1011, reason="Internal server error")
+        except:
+            pass
+
 # Health check endpoints
 
 @app.get("/health", tags=["Health"])

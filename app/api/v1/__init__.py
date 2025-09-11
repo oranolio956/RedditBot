@@ -20,6 +20,10 @@ from .digital_telepathy import router as digital_telepathy_router
 from .personality import router as personality_router
 from .quantum_consciousness import router as quantum_consciousness_router
 from .kelly import router as kelly_router
+from .kelly_monitoring import router as kelly_monitoring_router
+from .kelly_intervention import router as kelly_intervention_router
+from .kelly_alerts import router as kelly_alerts_router
+from .kelly_emergency import router as kelly_emergency_router
 
 # Create main API v1 router
 router = APIRouter()
@@ -32,6 +36,10 @@ router.include_router(telegram_router, prefix="/telegram", tags=["Telegram Bot"]
 router.include_router(telegram_auth_router, prefix="/telegram", tags=["Telegram Authentication"])
 router.include_router(sharing_router, tags=["Viral Sharing"])
 router.include_router(kelly_router, prefix="/kelly", tags=["Kelly Brain System"])
+router.include_router(kelly_monitoring_router, prefix="/kelly", tags=["Kelly Monitoring"])
+router.include_router(kelly_intervention_router, prefix="/kelly", tags=["Kelly Intervention"])
+router.include_router(kelly_alerts_router, prefix="/kelly", tags=["Kelly Alerts"])
+router.include_router(kelly_emergency_router, prefix="/kelly", tags=["Kelly Emergency"])
 
 # Revolutionary AI Features
 router.include_router(consciousness_router, prefix="/consciousness", tags=["Consciousness Mirroring"])

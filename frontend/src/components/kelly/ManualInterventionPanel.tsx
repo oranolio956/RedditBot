@@ -38,10 +38,7 @@ interface QuickReply {
 }
 
 const ManualInterventionPanel: React.FC<ManualInterventionPanelProps> = ({ 
-  conversation,
-  manualMode = false,
-  onManualModeToggle,
-  className
+  onManualModeToggle
 }) => {
   const { selectedConversation, activeConversations, setActiveConversations } = useKellyStore();
   const [isKellyPaused, setIsKellyPaused] = useState(false);

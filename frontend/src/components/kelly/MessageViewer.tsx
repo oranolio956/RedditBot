@@ -4,42 +4,29 @@
  * Optimized for large message histories with virtual scrolling
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { FixedSizeList as List } from 'react-window';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Send,
   Bot,
   User,
-  AlertTriangle,
-  Shield,
-  Clock,
-  CheckCircle,
-  XCircle,
   Zap,
   Brain,
-  Heart,
   Star,
   Flag,
   MoreVertical,
   Copy,
   ThumbsUp,
   ThumbsDown,
-  Edit,
-  Trash2,
   RefreshCw,
-  Eye,
-  EyeOff,
   Volume2,
-  VolumeX,
   Image,
   File,
-  Download,
-  MessageCircle
+  MessageCircle,
+  Shield
 } from 'lucide-react';
 import { KellyConversation, ConversationMessage, GeneratedResponse } from '@/types/kelly';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { useKellyConversationUpdates, useClaudeResponseGeneration } from '@/lib/websocket';
 import { cn, formatRelativeTime, formatDateTime } from '@/lib/utils';
 
@@ -50,15 +37,6 @@ interface MessageViewerProps {
   className?: string;
 }
 
-interface MessageItemProps {
-  index: number;
-  style: React.CSSProperties;
-  data: {
-    messages: ConversationMessage[];
-    conversation: KellyConversation;
-    onMessageAction: (messageId: string, action: string) => void;
-  };
-}
 
 // Typing indicator component
 const TypingIndicator: React.FC<{ visible: boolean }> = ({ visible }) => {
@@ -89,13 +67,11 @@ const TypingIndicator: React.FC<{ visible: boolean }> = ({ visible }) => {
 // Individual message bubble component
 const MessageBubble: React.FC<{
   message: ConversationMessage;
-  conversation: KellyConversation;
   onAction: (messageId: string, action: string) => void;
-}> = ({ message, conversation, onAction }) => {
+}> = ({ message, onAction }) => {
   const [showActions, setShowActions] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const isKelly = message.sender === 'kelly';
-  const isUser = message.sender === 'user';
 
   const getSafetyColor = useCallback((flags: any[]) => {
     if (flags.some(f => f.severity === 'critical')) return 'text-states-stress';
@@ -364,8 +340,6 @@ export const MessageViewer: React.FC<MessageViewerProps> = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [claudeGenerating, setClaudeGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<List>(null);
-  const [listHeight, setListHeight] = useState(400);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Load conversation messages
@@ -381,19 +355,6 @@ export const MessageViewer: React.FC<MessageViewerProps> = ({
     scrollToBottom();
   }, [messages]);
 
-  // Update list height when container resizes
-  useEffect(() => {
-    const updateHeight = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        setListHeight(rect.height - 150); // Account for input area
-      }
-    };
-
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
-  }, []);
 
   // Real-time message updates
   useKellyConversationUpdates(
@@ -409,7 +370,7 @@ export const MessageViewer: React.FC<MessageViewerProps> = ({
   useClaudeResponseGeneration(
     conversation.id,
     useCallback((update) => {
-      const { status, thinking_process, partial_response } = update.payload;
+      const { status } = update.payload;
       
       if (status === 'thinking') {
         setIsTyping(true);
@@ -551,7 +512,6 @@ export const MessageViewer: React.FC<MessageViewerProps> = ({
                 <MessageBubble
                   key={message.id}
                   message={message}
-                  conversation={conversation}
                   onAction={handleMessageAction}
                 />
               ))}

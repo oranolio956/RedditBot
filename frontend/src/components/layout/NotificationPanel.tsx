@@ -3,9 +3,9 @@
  * Displays real-time notifications and alerts
  */
 
-import React from 'react';
+
 import { motion } from 'framer-motion';
-import { BellIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { BellIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { formatRelativeTime } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';

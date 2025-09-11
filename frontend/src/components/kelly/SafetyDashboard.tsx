@@ -3,7 +3,7 @@
  * Real-time safety monitoring with Claude AI analysis
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldCheckIcon,
@@ -13,9 +13,7 @@ import {
   EyeIcon,
   HandRaisedIcon,
   DocumentTextIcon,
-  ClockIcon,
   UserGroupIcon,
-  ChartBarIcon,
   FlagIcon,
   BellIcon,
 } from '@heroicons/react/24/outline';
@@ -252,8 +250,8 @@ export default function SafetyDashboard({ accountId, className = '' }: SafetyDas
                             {alert.description}
                           </p>
                           <div className="flex items-center space-x-4 mt-2 text-xs text-text-tertiary">
-                            <span>Conversation: {alert.conversation_id.slice(0, 8)}...</span>
-                            <span>Account: {alert.account_id.slice(0, 8)}...</span>
+                            <span>Conversation: {alert.conversation_id?.slice(0, 8) || 'N/A'}...</span>
+                            <span>Account: {alert.account_id?.slice(0, 8) || 'N/A'}...</span>
                             <span>{new Date().toLocaleTimeString()}</span>
                           </div>
                           {alert.requires_immediate_action && (
