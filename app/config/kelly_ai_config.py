@@ -488,7 +488,7 @@ class KellyAIConfig:
         try:
             # Check API key
             anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-            if not anthropic_api_key or anthropic_api_key.startswith("sk-ant-api03-"):
+            if not anthropic_api_key or anthropic_api_key == "your_anthropic_api_key_here":
                 validation_results["errors"].append("Invalid or missing ANTHROPIC_API_KEY")
                 validation_results["valid"] = False
             

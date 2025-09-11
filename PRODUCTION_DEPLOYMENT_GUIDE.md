@@ -23,7 +23,7 @@ Create a `.env` file in the root directory with:
 
 ```env
 # Claude AI Configuration
-ANTHROPIC_API_KEY=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
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
 # PostgreSQL Database (Production - Render)
 DATABASE_URL=postgresql://telegram_ukqd_user:AIxlRpBd4iDC72ZhhjVxKsoFBxQIklip@dpg-d3116indiees73adq3ig-a.oregon-postgres.render.com/telegram_ukqd
