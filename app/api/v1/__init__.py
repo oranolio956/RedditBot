@@ -24,6 +24,9 @@ from .kelly_monitoring import router as kelly_monitoring_router
 from .kelly_intervention import router as kelly_intervention_router
 from .kelly_alerts import router as kelly_alerts_router
 from .kelly_emergency import router as kelly_emergency_router
+from .kelly_analytics import router as kelly_analytics_router
+from .kelly_intelligence import router as kelly_intelligence_router
+from .kelly_crm import router as kelly_crm_router
 
 # Create main API v1 router
 router = APIRouter()
@@ -40,6 +43,9 @@ router.include_router(kelly_monitoring_router, prefix="/kelly", tags=["Kelly Mon
 router.include_router(kelly_intervention_router, prefix="/kelly", tags=["Kelly Intervention"])
 router.include_router(kelly_alerts_router, prefix="/kelly", tags=["Kelly Alerts"])
 router.include_router(kelly_emergency_router, prefix="/kelly", tags=["Kelly Emergency"])
+router.include_router(kelly_analytics_router, prefix="/kelly/analytics", tags=["Kelly Analytics"])
+router.include_router(kelly_intelligence_router, prefix="/kelly/intelligence", tags=["Kelly Intelligence"])
+router.include_router(kelly_crm_router, prefix="/kelly/crm", tags=["Kelly CRM"])
 
 # Revolutionary AI Features
 router.include_router(consciousness_router, prefix="/consciousness", tags=["Consciousness Mirroring"])
