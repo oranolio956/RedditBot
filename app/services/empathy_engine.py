@@ -36,7 +36,7 @@ from app.models.emotional_intelligence import (
 from app.models.user import User
 from app.models.conversation import Message, Conversation
 from app.services.emotion_detector import EmotionAnalysisResult
-from app.database.session import get_db
+from app.database.connection import get_db_session as get_db
 from sqlalchemy.orm import Session
 from app.core.config import settings
 

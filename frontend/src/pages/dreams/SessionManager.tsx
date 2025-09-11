@@ -1,0 +1,1 @@
+import React from 'react'; import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'; export default function SessionManager() { return (<div className="p-6"><Card><CardHeader><CardTitle>SessionManager under construction</CardTitle></CardHeader><CardContent><p>Feature coming soon.</p></CardContent></Card></div>); }

@@ -1,0 +1,118 @@
+{
+  "timestamp": "2025-09-10T16:54:32.244014",
+  "overall_score": 26.818181818181817,
+  "categories": {
+    "security": {
+      "score": 45,
+      "status": "failed",
+      "issues": [
+        "Rate limiting middleware not found",
+        "Secrets manager not found",
+        "Potential secrets in .env file",
+        "CORS configuration check failed"
+      ],
+      "details": "Security score: 45/100"
+    },
+    "authentication": {
+      "score": 25,
+      "status": "warning",
+      "issues": [
+        "Protected endpoints not properly secured",
+        "JWT implementation not found",
+        "Password hashing not implemented"
+      ],
+      "details": "Authentication score: 25/100"
+    },
+    "api_endpoints": {
+      "score": 0,
+      "status": "failed",
+      "issues": [
+        "App import failed: No module named 'torch'"
+      ],
+      "details": "API endpoints score: 0/100"
+    },
+    "ml_models": {
+      "score": 0,
+      "status": "warning",
+      "issues": [
+        "Personality service not found: No module named 'app.services.personality_service'",
+        "Emotional intelligence service not found: No module named 'app.services.emotional_intelligence_service'",
+        "ML conversation service not found: No module named 'app.services.ml_conversation_service'",
+        "Synesthesia engine not found"
+      ],
+      "details": "ML models score: 0/100"
+    },
+    "websockets": {
+      "score": 0,
+      "status": "warning",
+      "issues": [
+        "WebSocket manager not found",
+        "WebSocket route check failed: No module named 'torch'",
+        "Real-time service not implemented"
+      ],
+      "details": "WebSocket score: 0/100"
+    },
+    "database": {
+      "score": 25,
+      "status": "warning",
+      "issues": [
+        "Database connection failed: cannot import name 'get_database_url' from 'app.database.connection' (/Users/daltonmetzler/Desktop/Reddit - bot/app/database/connection.py)",
+        "Database optimization not implemented",
+        "Database manager not found"
+      ],
+      "details": "Database score: 25/100"
+    },
+    "caching": {
+      "score": 30,
+      "status": "warning",
+      "issues": [
+        "Cache service not implemented",
+        "Cache optimization not implemented"
+      ],
+      "details": "Caching score: 30/100"
+    },
+    "error_handling": {
+      "score": 65,
+      "status": "passed",
+      "issues": [
+        "Retry mechanism not implemented"
+      ],
+      "details": "Error handling score: 65/100"
+    },
+    "monitoring": {
+      "score": 75,
+      "status": "passed",
+      "issues": [
+        "Monitoring service not found"
+      ],
+      "details": "Monitoring score: 75/100"
+    },
+    "ai_features": {
+      "score": 0,
+      "status": "warning",
+      "issues": [
+        "PersonalityService not implemented",
+        "EmotionalIntelligenceService not implemented",
+        "MLConversationService not implemented",
+        "SynesthesiaEngine not implemented",
+        "NeuralDreamsService not implemented",
+        "QuantumConsciousnessService not implemented",
+        "AIMemoryService not implemented",
+        "ContextAwarenessService not implemented"
+      ],
+      "details": "AI features score: 0/100"
+    },
+    "performance": {
+      "score": 30,
+      "status": "warning",
+      "issues": [
+        "Performance optimizer not implemented",
+        "Async service patterns not implemented"
+      ],
+      "details": "Performance score: 30/100"
+    }
+  },
+  "critical_issues": [],
+  "warnings": [],
+  "recommendations": []
+}

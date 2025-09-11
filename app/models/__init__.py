@@ -51,6 +51,17 @@ from app.models.reality_synthesis import (
     CollaborativeRealitySession, PortalSystem, RealityLayer, SpatialComputingPlatform,
     RealityRenderingEngine, RealityTransitionType, TherapeuticRealityProtocol
 )
+from app.models.telegram_account import (
+    TelegramAccount, AccountStatus, SafetyLevel, AccountSafetyEvent, AccountConfiguration
+)
+from app.models.telegram_community import (
+    TelegramCommunity, CommunityType, EngagementStrategy, CommunityStatus,
+    CommunityEngagementEvent, CommunityInsight
+)
+from app.models.telegram_conversation import (
+    TelegramConversation, ConversationMessage, MessageType, MessageDirection,
+    ConversationStatus, ConversationContext
+)
 
 __all__ = [
     # User models
@@ -178,4 +189,27 @@ __all__ = [
     "RealityRenderingEngine",
     "RealityTransitionType",
     "TherapeuticRealityProtocol",
+    
+    # Telegram Account Management models
+    "TelegramAccount",
+    "AccountStatus",
+    "SafetyLevel",
+    "AccountSafetyEvent",
+    "AccountConfiguration",
+    
+    # Telegram Community models
+    "TelegramCommunity",
+    "CommunityType",
+    "EngagementStrategy",
+    "CommunityStatus",
+    "CommunityEngagementEvent",
+    "CommunityInsight",
+    
+    # Telegram Conversation models
+    "TelegramConversation",
+    "ConversationMessage",
+    "MessageType",
+    "MessageDirection",
+    "ConversationStatus",
+    "ConversationContext",
 ]

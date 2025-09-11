@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field, validator
 import logging
 
-from app.database.session import get_db
+from app.database.connection import get_db_session as get_db
 from app.models.user import User
 from app.models.emotional_intelligence import (
     EmotionalProfile, EmotionReading, EmpathyAssessment,

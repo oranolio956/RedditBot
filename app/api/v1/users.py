@@ -15,6 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_session
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserStats
+from app.core.auth import (
+    get_current_user, require_permission, require_admin,
+    AuthenticatedUser, Permission
+)
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -27,6 +31,7 @@ async def get_users(
     skip: int = Query(0, ge=0, description="Number of users to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of users to return"),
     active_only: bool = Query(True, description="Return only active users"),
+    current_user: AuthenticatedUser = Depends(require_permission(Permission.READ_USERS)),
     db: AsyncSession = Depends(get_db_session)
 ) -> List[UserResponse]:
     """
@@ -62,6 +67,7 @@ async def get_users(
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: UUID,
+    current_user: AuthenticatedUser = Depends(require_permission(Permission.READ_USERS)),
     db: AsyncSession = Depends(get_db_session)
 ) -> UserResponse:
     """
@@ -126,6 +132,7 @@ async def get_user_by_telegram_id(
 @router.post("/", response_model=UserResponse, status_code=201)
 async def create_user(
     user_data: UserCreate,
+    current_user: AuthenticatedUser = Depends(require_permission(Permission.WRITE_USERS)),
     db: AsyncSession = Depends(get_db_session)
 ) -> UserResponse:
     """
@@ -171,6 +178,7 @@ async def create_user(
 async def update_user(
     user_id: UUID,
     user_data: UserUpdate,
+    current_user: AuthenticatedUser = Depends(require_permission(Permission.WRITE_USERS)),
     db: AsyncSession = Depends(get_db_session)
 ) -> UserResponse:
     """
@@ -192,6 +200,13 @@ async def update_user(
         
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        
+        # Check if current user can update this user (self or admin)
+        if not current_user.is_admin and current_user.user_id != user_id:
+            raise HTTPException(
+                status_code=403, 
+                detail="You can only update your own profile"
+            )
         
         # Update user with provided data
         update_data = user_data.model_dump(exclude_unset=True)
@@ -215,6 +230,7 @@ async def update_user(
 async def delete_user(
     user_id: UUID,
     hard_delete: bool = Query(False, description="Perform hard delete instead of soft delete"),
+    current_user: AuthenticatedUser = Depends(require_permission(Permission.DELETE_USERS)),
     db: AsyncSession = Depends(get_db_session)
 ) -> None:
     """
@@ -256,6 +272,7 @@ async def delete_user(
 @router.post("/{user_id}/restore", response_model=UserResponse)
 async def restore_user(
     user_id: UUID,
+    current_user: AuthenticatedUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session)
 ) -> UserResponse:
     """
@@ -299,6 +316,7 @@ async def restore_user(
 @router.get("/{user_id}/stats", response_model=UserStats)
 async def get_user_stats(
     user_id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session)
 ) -> UserStats:
     """

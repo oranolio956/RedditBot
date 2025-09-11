@@ -15,7 +15,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database.session import get_db
+from app.database.connection import get_db_session as get_db
 from app.models.sharing import (
     ShareableContent, ContentShare, UserReferral, ReferralProgram,
     ViralMetrics, ShareableContentType, SocialPlatform

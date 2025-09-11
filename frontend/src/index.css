@@ -1,0 +1,449 @@
+/**
+ * Global styles for AI Consciousness Platform
+ * Apple-inspired design system implementation
+ */
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* CSS Custom Properties for Apple-inspired design */
+:root {
+  /* Consciousness Colors */
+  --consciousness-primary: #007AFF;
+  --consciousness-secondary: #5856D6;
+  --consciousness-accent: #FF9500;
+  
+  /* State Colors */
+  --states-flow: #30D158;
+  --states-stress: #FF453A;
+  --states-neutral: #8E8E93;
+  
+  /* Surface Colors */
+  --surface-primary: #FFFFFF;
+  --surface-secondary: #F2F2F7;
+  --surface-elevated: rgba(255,255,255,0.8);
+  
+  /* Text Colors */
+  --text-primary: #000000;
+  --text-secondary: #3C3C43;
+  --text-tertiary: #8E8E93;
+  
+  /* Semantic Colors */
+  --success: #30D158;
+  --warning: #FF9500;
+  --error: #FF453A;
+  --info: #007AFF;
+}
+
+/* Dark mode color overrides */
+.dark {
+  --consciousness-primary: #0A84FF;
+  --surface-primary: #000000;
+  --surface-secondary: #1C1C1E;
+  --surface-elevated: rgba(28,28,30,0.8);
+  --text-primary: #FFFFFF;
+  --text-secondary: #EBEBF5;
+  --text-tertiary: #8E8E93;
+}
+
+/* Base styles */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+    @apply bg-surface-primary text-text-primary antialiased;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Apple-style focus rings */
+  *:focus {
+    outline: none;
+  }
+  
+  *:focus-visible {
+    @apply ring-2 ring-consciousness-primary ring-offset-2 ring-offset-surface-primary;
+  }
+}
+
+/* Component layer styles */
+@layer components {
+  /* Consciousness-specific gradients */
+  .gradient-consciousness {
+    background: linear-gradient(135deg, var(--consciousness-primary) 0%, var(--consciousness-secondary) 100%);
+  }
+  
+  .gradient-flow {
+    background: linear-gradient(135deg, var(--states-flow) 0%, var(--consciousness-primary) 100%);
+  }
+  
+  .gradient-breakthrough {
+    background: linear-gradient(135deg, var(--consciousness-accent) 0%, var(--consciousness-primary) 100%);
+  }
+  
+  /* Glassmorphism effect */
+  .glass {
+    background: var(--surface-elevated);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  /* Apple-style scrollbars */
+  .scrollbar-apple {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 122, 255, 0.3) transparent;
+  }
+  
+  .scrollbar-apple::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollbar-apple::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-apple::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 122, 255, 0.3);
+    border-radius: 4px;
+    border: none;
+  }
+  
+  .scrollbar-apple::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 122, 255, 0.5);
+  }
+  
+  /* Consciousness-specific animations */
+  @keyframes consciousness-pulse {
+    0%, 100% { 
+      box-shadow: 0 0 20px rgba(0, 122, 255, 0.3);
+      transform: scale(1);
+    }
+    50% { 
+      box-shadow: 0 0 40px rgba(0, 122, 255, 0.6);
+      transform: scale(1.02);
+    }
+  }
+  
+  @keyframes quantum-entangle {
+    0% { 
+      opacity: 0.7;
+      transform: translateY(0) rotate(0deg);
+    }
+    50% { 
+      opacity: 1;
+      transform: translateY(-2px) rotate(180deg);
+    }
+    100% { 
+      opacity: 0.7;
+      transform: translateY(0) rotate(360deg);
+    }
+  }
+  
+  @keyframes memory-recall {
+    0% { 
+      transform: scale(1) rotateX(0deg);
+      opacity: 1;
+    }
+    50% { 
+      transform: scale(1.1) rotateX(180deg);
+      opacity: 0.8;
+    }
+    100% { 
+      transform: scale(1) rotateX(360deg);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes dream-flow {
+    0%, 100% { 
+      background-position: 0% 50%;
+    }
+    50% { 
+      background-position: 100% 50%;
+    }
+  }
+  
+  .animate-consciousness-pulse {
+    animation: consciousness-pulse 3s ease-in-out infinite;
+  }
+  
+  .animate-quantum-entangle {
+    animation: quantum-entangle 4s linear infinite;
+  }
+  
+  .animate-memory-recall {
+    animation: memory-recall 2s ease-in-out infinite;
+  }
+  
+  .animate-dream-flow {
+    background: linear-gradient(-45deg, #5856D6, #007AFF, #30D158, #FF9500);
+    background-size: 400% 400%;
+    animation: dream-flow 8s ease infinite;
+  }
+  
+  /* Loading states */
+  .loading-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .loading-dots::after {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: loading-dots 1.4s infinite ease-in-out both;
+  }
+  
+  .loading-dots::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    margin-right: 4px;
+    animation: loading-dots 1.4s infinite ease-in-out both;
+    animation-delay: -0.32s;
+  }
+  
+  @keyframes loading-dots {
+    0%, 80%, 100% {
+      opacity: 0.3;
+      transform: scale(0.8);
+    }
+    40% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  /* Typography enhancements */
+  .text-gradient {
+    background: linear-gradient(135deg, var(--consciousness-primary), var(--consciousness-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Consciousness state indicators */
+  .consciousness-indicator {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .consciousness-indicator::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    animation: shimmer 2s infinite;
+  }
+  
+  @keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+  }
+  
+  /* 3D Memory Palace styles */
+  .memory-palace-3d {
+    perspective: 1000px;
+    transform-style: preserve-3d;
+  }
+  
+  .memory-room {
+    transform-style: preserve-3d;
+    transition: transform 0.3s ease;
+  }
+  
+  .memory-room:hover {
+    transform: rotateY(15deg) rotateX(5deg);
+  }
+  
+  /* Quantum visualization styles */
+  .quantum-particle {
+    position: relative;
+  }
+  
+  .quantum-particle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    border: 2px solid var(--consciousness-secondary);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: quantum-orbit 3s linear infinite;
+  }
+  
+  @keyframes quantum-orbit {
+    0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); opacity: 1; }
+    50% { transform: translate(-50%, -50%) rotate(180deg) scale(1.2); opacity: 0.7; }
+    100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); opacity: 1; }
+  }
+  
+  /* Synesthesia color effects */
+  .synesthesia-rainbow {
+    background: linear-gradient(45deg, 
+      #FF0000 0%, 
+      #FF8000 14%, 
+      #FFFF00 28%, 
+      #80FF00 42%, 
+      #00FF00 57%, 
+      #00FF80 71%, 
+      #00FFFF 85%, 
+      #0080FF 100%
+    );
+    background-size: 400% 400%;
+    animation: synesthesia-flow 5s ease infinite;
+  }
+  
+  @keyframes synesthesia-flow {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  
+  /* Emotional state visualizations */
+  .emotion-pulse {
+    animation: emotion-pulse 2s ease-in-out infinite;
+  }
+  
+  @keyframes emotion-pulse {
+    0%, 100% { 
+      opacity: 0.8;
+      transform: scale(1);
+    }
+    50% { 
+      opacity: 1;
+      transform: scale(1.05);
+    }
+  }
+}
+
+/* Utility layer additions */
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Smooth transitions for all interactive elements */
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Apple-style button press animation */
+  .active-scale {
+    transform: scale(0.96);
+  }
+  
+  /* Consciousness-specific utility classes */
+  .text-consciousness-gradient {
+    @apply text-gradient;
+  }
+  
+  .bg-consciousness-gradient {
+    @apply gradient-consciousness;
+  }
+  
+  .bg-flow-gradient {
+    @apply gradient-flow;
+  }
+  
+  .bg-breakthrough-gradient {
+    @apply gradient-breakthrough;
+  }
+  
+  /* Safe area support for mobile */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+  
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    font-size: 12pt;
+    line-height: 1.4;
+    color: black;
+    background: white;
+  }
+  
+  .print-break {
+    page-break-before: always;
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  :root {
+    --consciousness-primary: #0040DD;
+    --text-secondary: #000000;
+    --surface-secondary: #FFFFFF;
+  }
+  
+  .dark {
+    --consciousness-primary: #66B3FF;
+    --text-secondary: #FFFFFF;
+    --surface-secondary: #000000;
+  }
+}
+
+/* Force color gamut for wide color displays */
+@media (color-gamut: p3) {
+  :root {
+    --consciousness-primary: color(display-p3 0 0.482 1);
+    --consciousness-secondary: color(display-p3 0.345 0.337 0.839);
+    --consciousness-accent: color(display-p3 1 0.584 0);
+  }
+}

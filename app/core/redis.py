@@ -1992,3 +1992,8 @@ async def get_redis_info() -> Dict[str, Any]:
 async def is_redis_healthy() -> bool:
     """Check if Redis connection is healthy."""
     return redis_manager.is_healthy
+
+
+def get_redis_client() -> 'RedisManager':
+    """Get the global Redis manager instance."""
+    return redis_manager

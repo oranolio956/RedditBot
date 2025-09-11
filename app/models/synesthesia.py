@@ -16,10 +16,10 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-from app.database.base_class import Base
+from app.database.base import BaseModel
 
 
-class SynestheticProfile(Base):
+class SynestheticProfile(BaseModel):
     """User's personalized synesthetic patterns and preferences"""
     __tablename__ = "synesthetic_profiles"
 
@@ -64,7 +64,7 @@ class SynestheticProfile(Base):
     )
 
 
-class SynestheticTranslation(Base):
+class SynestheticTranslation(BaseModel):
     """Real-time cross-modal translation sessions and results"""
     __tablename__ = "synesthetic_translations"
 
@@ -113,7 +113,7 @@ class SynestheticTranslation(Base):
     )
 
 
-class CrossModalMapping(Base):
+class CrossModalMapping(BaseModel):
     """Learned associations between different sensory modalities"""
     __tablename__ = "cross_modal_mappings"
 
@@ -160,7 +160,7 @@ class CrossModalMapping(Base):
     )
 
 
-class SynestheticExperience(Base):
+class SynestheticExperience(BaseModel):
     """Complete multi-sensory synesthetic experiences and sessions"""
     __tablename__ = "synesthetic_experiences"
 
@@ -217,7 +217,7 @@ class SynestheticExperience(Base):
     )
 
 
-class HapticPattern(Base):
+class HapticPattern(BaseModel):
     """Tactile feedback patterns and intensities for synesthetic experiences"""
     __tablename__ = "haptic_patterns"
 
@@ -259,7 +259,7 @@ class HapticPattern(Base):
     )
 
 
-class SynestheticResearchData(Base):
+class SynestheticResearchData(BaseModel):
     """Research data collection for advancing synesthesia science"""
     __tablename__ = "synesthetic_research_data"
 
@@ -300,7 +300,7 @@ class SynestheticResearchData(Base):
     )
 
 
-class SynestheticCalibrationSession(Base):
+class SynestheticCalibrationSession(BaseModel):
     """Calibration sessions for personalizing synesthetic mappings"""
     __tablename__ = "synesthetic_calibration_sessions"
 

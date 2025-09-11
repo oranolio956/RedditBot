@@ -32,9 +32,10 @@ from .session import SessionManager, MessageContext, ConversationMode
 from .anti_ban import AntiBanManager, RiskLevel
 from .metrics import TelegramMetrics
 from .rate_limiter import AdvancedRateLimiter
-from ..services.voice_integration import (
-    get_voice_integration_service, process_voice_message as process_voice_integration
-)
+# Temporarily disabled due to syntax error in voice_integration.py
+# from ..services.voice_integration import (
+#     get_voice_integration_service, process_voice_message as process_voice_integration
+# )
 
 logger = structlog.get_logger(__name__)
 

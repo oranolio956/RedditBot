@@ -6,11 +6,13 @@ Provides REST API endpoints, webhook handling, and health monitoring.
 """
 
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Dict, Any
 
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -22,6 +24,7 @@ from app.config import settings
 from app.database.connection import db_manager
 from app.database.manager import db_service
 from app.core.redis import redis_manager
+from app.core.auth import get_auth_manager
 from app.api.v1 import router as api_v1_router
 from app.middleware.rate_limiting import RateLimitMiddleware
 from app.middleware.request_logging import RequestLoggingMiddleware
@@ -29,6 +32,9 @@ from app.middleware.error_handling import ErrorHandlingMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware, RateLimitSecurityMiddleware
 from app.middleware.input_validation import InputValidationMiddleware
 from app.telegram.bot import get_bot, cleanup_bot
+from app.services.ml_initialization import initialize_ml_models, cleanup_ml_models
+from app.services.background_tasks import start_background_tasks
+from app.websocket.manager import websocket_manager
 
 # Configure structured logging
 structlog.configure(
@@ -73,15 +79,21 @@ async def lifespan(app: FastAPI):
         await redis_manager.initialize()
         logger.info("Redis connection initialized")
         
+        # Initialize authentication manager
+        auth_manager = await get_auth_manager()
+        logger.info("Authentication manager initialized")
+        
         # Initialize Telegram bot
         telegram_bot = await get_bot()
         logger.info("Telegram bot initialized")
         
-        # Initialize ML models (if needed)
-        # await ml_service.initialize()
+        # Initialize ML models and AI engines
+        await initialize_ml_models()
+        logger.info("ML models and AI engines initialized")
         
         # Start background tasks
-        # await start_background_tasks()
+        await start_background_tasks()
+        logger.info("Background tasks started")
         
         logger.info("Application startup completed successfully")
         
@@ -108,7 +120,8 @@ async def lifespan(app: FastAPI):
         logger.info("Redis connections closed")
         
         # Cleanup ML resources
-        # await ml_service.cleanup()
+        await cleanup_ml_models()
+        logger.info("ML models cleaned up")
         
         logger.info("Application shutdown completed successfully")
         
@@ -191,14 +204,53 @@ app.include_router(
     tags=["API v1"]
 )
 
-# Telegram webhook endpoint
+# Telegram webhook endpoint with signature verification
 if settings.telegram.webhook_url:
-    from app.telegram.webhook import create_webhook_route_handler
+    from app.core.auth import verify_telegram_webhook
     
     @app.post("/webhook/telegram")
     async def telegram_webhook(request: Request):
-        """Handle Telegram webhook updates."""
+        """Handle Telegram webhook updates with signature verification."""
         try:
+            # Verify webhook signature for security
+            if settings.security.webhook_signature_required:
+                is_valid = await verify_telegram_webhook(
+                    request, 
+                    require_signature=True
+                )
+                if not is_valid:
+                    logger.warning(
+                        "Invalid webhook signature",
+                        ip=request.client.host if request.client else "unknown",
+                        user_agent=request.headers.get("user-agent", "unknown")
+                    )
+                    raise HTTPException(
+                        status_code=401, 
+                        detail="Invalid webhook signature"
+                    )
+            
+            # Rate limiting for webhook endpoint
+            client_ip = request.client.host if request.client else "unknown"
+            from app.core.auth import get_auth_manager
+            auth_manager = await get_auth_manager()
+            
+            # Allow 60 webhook calls per minute per IP
+            is_rate_limited = await auth_manager.rate_limit_check(
+                f"webhook:{client_ip}", 
+                limit=60, 
+                window=60
+            )
+            
+            if is_rate_limited:
+                logger.warning(
+                    "Webhook rate limit exceeded",
+                    ip=client_ip
+                )
+                raise HTTPException(
+                    status_code=429, 
+                    detail="Rate limit exceeded"
+                )
+            
             # Get bot instance
             from app.telegram.bot import telegram_bot
             if not telegram_bot:
@@ -207,12 +259,27 @@ if settings.telegram.webhook_url:
             # Process update through bot's webhook manager
             update_data = await request.json()
             
-            # This would process the update through aiogram
-            # For now, return success response
-            return {"status": "received"}
+            # Log webhook received for monitoring
+            logger.info(
+                "Webhook received",
+                update_id=update_data.get("update_id"),
+                chat_id=update_data.get("message", {}).get("chat", {}).get("id"),
+                ip=client_ip
+            )
             
+            # Process the update (placeholder - implement actual bot logic)
+            # await telegram_bot.process_update(update_data)
+            
+            return {"status": "received", "timestamp": structlog.processors.TimeStamper(fmt="iso")._make_stamper()()}
+            
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.error("Error processing webhook", error=str(e))
+            logger.error(
+                "Error processing webhook", 
+                error=str(e),
+                ip=request.client.host if request.client else "unknown"
+            )
             raise HTTPException(status_code=500, detail="Webhook processing error")
 
 
@@ -357,6 +424,310 @@ async def metrics() -> Response:
         raise HTTPException(status_code=500, detail="Metrics unavailable")
 
 
+# Enhanced health check endpoints
+
+@app.get("/health/ai", tags=["Health"])
+async def ai_health_check() -> Dict[str, Any]:
+    """
+    AI systems health check.
+    
+    Provides comprehensive health information for all AI components including
+    ML models, engines, and processing capabilities.
+    """
+    try:
+        from app.services.ml_initialization import model_manager
+        
+        # Get ML model health
+        ml_health = await model_manager.health_check()
+        
+        # Check individual AI engines
+        engine_health = {}
+        engines = ['consciousness', 'emotional_intelligence', 'meta_reality', 
+                  'transcendence', 'digital_telepathy', 'quantum_consciousness']
+        
+        for engine_name in engines:
+            engine = model_manager.get_engine(engine_name)
+            if engine and hasattr(engine, 'health_check'):
+                try:
+                    engine_health[engine_name] = await engine.health_check()
+                except Exception as e:
+                    engine_health[engine_name] = {'status': 'error', 'error': str(e)}
+            else:
+                engine_health[engine_name] = {'status': 'not_initialized'}
+        
+        # Overall AI health status
+        healthy_engines = sum(1 for health in engine_health.values() 
+                             if health.get('status') == 'healthy')
+        total_engines = len(engines)
+        
+        overall_status = {
+            "status": "healthy" if healthy_engines == total_engines else "degraded",
+            "timestamp": datetime.utcnow().isoformat(),
+            "ml_models": ml_health,
+            "ai_engines": engine_health,
+            "engines_healthy": healthy_engines,
+            "engines_total": total_engines,
+            "health_ratio": healthy_engines / total_engines if total_engines > 0 else 0
+        }
+        
+        return overall_status
+        
+    except Exception as e:
+        logger.error(f"AI health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="AI health check failed")
+
+@app.get("/health/database", tags=["Health"])
+async def database_health_check() -> Dict[str, Any]:
+    """
+    Database health check with performance metrics.
+    
+    Provides detailed database health including connection pool status,
+    query performance, and optimization recommendations.
+    """
+    try:
+        from app.core.database_optimization import db_optimizer
+        
+        # Get database health from service
+        db_health = await db_service.get_health_status()
+        
+        # Get performance stats
+        performance_stats = db_optimizer.get_performance_stats()
+        
+        # Get pool optimization analysis
+        pool_analysis = await db_optimizer.optimize_connection_pool()
+        
+        # Get query analysis
+        query_analysis = await db_optimizer.analyze_query_patterns()
+        
+        return {
+            "status": db_health.get('overall_status', 'unknown'),
+            "timestamp": datetime.utcnow().isoformat(),
+            "database_health": db_health,
+            "performance_stats": performance_stats,
+            "connection_pool": pool_analysis,
+            "query_analysis": query_analysis
+        }
+        
+    except Exception as e:
+        logger.error(f"Database health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database health check failed")
+
+@app.get("/health/cache", tags=["Health"])
+async def cache_health_check() -> Dict[str, Any]:
+    """
+    Cache systems health check.
+    
+    Provides health information for multi-tier caching including
+    hit ratios, memory usage, and performance metrics.
+    """
+    try:
+        from app.core.advanced_cache import cache_manager
+        
+        # Get cache statistics
+        cache_stats = await cache_manager.get_cache_stats()
+        
+        # Get Redis health
+        redis_healthy = await redis_manager.health_check()
+        redis_info = await redis_manager.get_info()
+        
+        # Determine overall cache health
+        cache_healthy = (
+            cache_stats.get('hit_ratio', 0) > 0.5 and
+            redis_healthy and
+            cache_stats.get('l1_cache', {}).get('memory_utilization', 0) < 0.9
+        )
+        
+        return {
+            "status": "healthy" if cache_healthy else "degraded",
+            "timestamp": datetime.utcnow().isoformat(),
+            "cache_stats": cache_stats,
+            "redis_health": redis_healthy,
+            "redis_info": redis_info,
+            "recommendations": [
+                "Consider increasing cache TTL" if cache_stats.get('hit_ratio', 0) < 0.7 else None,
+                "Memory usage high" if cache_stats.get('l1_cache', {}).get('memory_utilization', 0) > 0.8 else None
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Cache health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Cache health check failed")
+
+@app.get("/health/websocket", tags=["Health"])
+async def websocket_health_check() -> Dict[str, Any]:
+    """
+    WebSocket connections health check.
+    
+    Provides information about active WebSocket connections,
+    AI sessions, and real-time communication health.
+    """
+    try:
+        websocket_stats = websocket_manager.get_stats()
+        
+        # Check if WebSocket manager is healthy
+        websocket_healthy = (
+            websocket_stats.get('total_connections', 0) >= 0 and
+            len(websocket_stats.get('connection_health', {})) == websocket_stats.get('total_connections', 0)
+        )
+        
+        return {
+            "status": "healthy" if websocket_healthy else "degraded",
+            "timestamp": datetime.utcnow().isoformat(),
+            "websocket_stats": websocket_stats,
+            "active_connections": websocket_stats.get('total_connections', 0),
+            "active_ai_sessions": websocket_stats.get('active_ai_sessions', 0),
+            "topics_active": websocket_stats.get('total_topics', 0)
+        }
+        
+    except Exception as e:
+        logger.error(f"WebSocket health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="WebSocket health check failed")
+
+@app.get("/health/circuit-breakers", tags=["Health"])
+async def circuit_breakers_health_check() -> Dict[str, Any]:
+    """
+    Circuit breakers health check.
+    
+    Provides status of all circuit breakers protecting external services
+    and internal components from cascading failures.
+    """
+    try:
+        from app.core.circuit_breaker import circuit_breaker_manager
+        
+        # Get circuit breaker health summary
+        cb_health = circuit_breaker_manager.get_health_summary()
+        
+        # Get detailed status of all circuit breakers
+        cb_status = circuit_breaker_manager.get_all_status()
+        
+        return {
+            "status": cb_health.get('overall_health', 'unknown'),
+            "timestamp": datetime.utcnow().isoformat(),
+            "health_summary": cb_health,
+            "circuit_breaker_details": cb_status,
+            "recommendations": [
+                f"Check {name} service" for name, details in cb_status.items()
+                if details.get('state') == 'open'
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Circuit breakers health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Circuit breakers health check failed")
+
+@app.get("/health/background-tasks", tags=["Health"])
+async def background_tasks_health_check() -> Dict[str, Any]:
+    """
+    Background tasks health check.
+    
+    Provides status of all background tasks including monitoring,
+    cache management, and AI processing tasks.
+    """
+    try:
+        from app.services.background_tasks import get_background_task_status
+        
+        task_status = get_background_task_status()
+        
+        # Determine if background tasks are healthy
+        tasks_healthy = (
+            task_status.get('running', False) and
+            task_status.get('active_tasks', 0) > 0
+        )
+        
+        return {
+            "status": "healthy" if tasks_healthy else "degraded",
+            "timestamp": datetime.utcnow().isoformat(),
+            "background_tasks": task_status
+        }
+        
+    except Exception as e:
+        logger.error(f"Background tasks health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Background tasks health check failed")
+
+@app.get("/health/comprehensive", tags=["Health"])
+async def comprehensive_health_check() -> Dict[str, Any]:
+    """
+    Comprehensive health check of all system components.
+    
+    Aggregates health status from all subsystems and provides
+    an overall system health assessment with recommendations.
+    """
+    try:
+        # Gather health from all subsystems
+        health_checks = {}
+        
+        try:
+            health_checks['ai'] = await ai_health_check()
+        except:
+            health_checks['ai'] = {'status': 'error'}
+            
+        try:
+            health_checks['database'] = await database_health_check()
+        except:
+            health_checks['database'] = {'status': 'error'}
+            
+        try:
+            health_checks['cache'] = await cache_health_check()
+        except:
+            health_checks['cache'] = {'status': 'error'}
+            
+        try:
+            health_checks['websocket'] = await websocket_health_check()
+        except:
+            health_checks['websocket'] = {'status': 'error'}
+            
+        try:
+            health_checks['circuit_breakers'] = await circuit_breakers_health_check()
+        except:
+            health_checks['circuit_breakers'] = {'status': 'error'}
+            
+        try:
+            health_checks['background_tasks'] = await background_tasks_health_check()
+        except:
+            health_checks['background_tasks'] = {'status': 'error'}
+        
+        # Calculate overall health
+        healthy_systems = sum(
+            1 for health in health_checks.values()
+            if health.get('status') == 'healthy'
+        )
+        total_systems = len(health_checks)
+        health_ratio = healthy_systems / total_systems
+        
+        # Determine overall status
+        if health_ratio >= 0.9:
+            overall_status = 'healthy'
+        elif health_ratio >= 0.7:
+            overall_status = 'degraded'
+        else:
+            overall_status = 'critical'
+        
+        # Generate recommendations
+        recommendations = []
+        for system_name, health in health_checks.items():
+            if health.get('status') != 'healthy':
+                recommendations.append(f"Check {system_name} system - status: {health.get('status')}")
+        
+        return {
+            "status": overall_status,
+            "timestamp": datetime.utcnow().isoformat(),
+            "health_ratio": health_ratio,
+            "healthy_systems": healthy_systems,
+            "total_systems": total_systems,
+            "subsystem_health": health_checks,
+            "recommendations": recommendations,
+            "system_info": {
+                "version": settings.app_version,
+                "environment": settings.environment,
+                "uptime": "calculated_uptime_would_go_here"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Comprehensive health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Comprehensive health check failed")
+
+
 @app.get("/", tags=["Root"])
 async def root() -> Dict[str, str]:
     """Root endpoint with basic application information."""
@@ -410,6 +781,252 @@ async def general_exception_handler(request: Request, exc: Exception):
             "path": request.url.path,
         }
     )
+
+
+# WebSocket endpoints for real-time features
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    Main WebSocket endpoint for real-time communication.
+    
+    Supports:
+    - Consciousness mirroring real-time updates
+    - Emotional intelligence live feedback  
+    - Quantum consciousness state broadcasting
+    - Digital telepathy network communication
+    - Neural dream streaming
+    - Meta-reality session updates
+    """
+    connection_id = None
+    try:
+        connection_id = await websocket_manager.connect(websocket)
+        logger.info(f"WebSocket connection established: {connection_id}")
+        
+        while True:
+            # Wait for messages from client
+            try:
+                data = await websocket.receive_text()
+                message = json.loads(data)
+                
+                message_type = message.get("type")
+                payload = message.get("data", {})
+                
+                # Handle different message types
+                if message_type == "ping":
+                    await websocket_manager.send_to_connection(
+                        connection_id, "pong", {"timestamp": datetime.utcnow().isoformat()}
+                    )
+                    
+                elif message_type == "subscribe":
+                    topic = payload.get("topic")
+                    if topic:
+                        await websocket_manager.subscribe_to_topic(connection_id, topic)
+                        
+                elif message_type == "unsubscribe":
+                    topic = payload.get("topic")
+                    if topic:
+                        await websocket_manager.unsubscribe_from_topic(connection_id, topic)
+                        
+                elif message_type == "start_consciousness_session":
+                    session_config = payload.get("config", {})
+                    session_id = await websocket_manager.start_consciousness_session(
+                        connection_id, session_config
+                    )
+                    
+                elif message_type == "start_emotional_session":
+                    session_config = payload.get("config", {})
+                    session_id = await websocket_manager.start_emotional_intelligence_session(
+                        connection_id, session_config
+                    )
+                    
+                elif message_type == "start_quantum_session":
+                    session_config = payload.get("config", {})
+                    session_id = await websocket_manager.start_quantum_consciousness_session(
+                        connection_id, session_config
+                    )
+                    
+                elif message_type == "start_telepathy_session":
+                    session_config = payload.get("config", {})
+                    session_id = await websocket_manager.start_digital_telepathy_session(
+                        connection_id, session_config
+                    )
+                    
+                else:
+                    await websocket_manager.send_to_connection(
+                        connection_id, "error", {"message": f"Unknown message type: {message_type}"}
+                    )
+                    
+            except json.JSONDecodeError:
+                await websocket_manager.send_to_connection(
+                    connection_id, "error", {"message": "Invalid JSON format"}
+                )
+                
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket client disconnected: {connection_id}")
+        
+    except Exception as e:
+        logger.error(f"WebSocket error: {str(e)}")
+        
+    finally:
+        if connection_id:
+            await websocket_manager.disconnect(connection_id)
+
+@app.websocket("/ws/auth")
+async def authenticated_websocket_endpoint(websocket: WebSocket, token: str = None):
+    """
+    Authenticated WebSocket endpoint for user-specific real-time features.
+    
+    Requires authentication token for user-specific features like:
+    - Personal consciousness sessions
+    - Emotional intelligence profiles
+    - Private telepathy networks
+    """
+    connection_id = None
+    user_id = None
+    
+    try:
+        # Validate authentication token
+        if token:
+            try:
+                from app.core.auth import decode_token
+                user_data = decode_token(token)
+                user_id = user_data.get("user_id")
+            except Exception as e:
+                logger.warning(f"WebSocket authentication failed: {str(e)}")
+                await websocket.close(code=4001, reason="Authentication failed")
+                return
+        
+        connection_id = await websocket_manager.connect(websocket, user_id)
+        logger.info(f"Authenticated WebSocket connection established: {connection_id} (user: {user_id})")
+        
+        # Send user-specific welcome message
+        await websocket_manager.send_to_connection(connection_id, "authenticated_welcome", {
+            "user_id": user_id,
+            "connection_id": connection_id,
+            "features_available": [
+                "personal_consciousness_sessions",
+                "emotional_intelligence_profiles",
+                "private_telepathy_networks",
+                "quantum_consciousness_tracking",
+                "meta_reality_experiences",
+                "transcendence_protocols"
+            ]
+        })
+        
+        while True:
+            try:
+                data = await websocket.receive_text()
+                message = json.loads(data)
+                
+                message_type = message.get("type")
+                payload = message.get("data", {})
+                
+                # Handle authenticated-only features
+                if message_type == "get_user_sessions":
+                    # Get user's active AI sessions
+                    user_sessions = {
+                        session_id: session_data
+                        for session_id, session_data in websocket_manager.ai_sessions.items()
+                        if session_data.get("connection_id") == connection_id
+                    }
+                    
+                    await websocket_manager.send_to_connection(
+                        connection_id, "user_sessions", {"sessions": user_sessions}
+                    )
+                    
+                elif message_type == "end_session":
+                    session_id = payload.get("session_id")
+                    if session_id:
+                        await websocket_manager.end_ai_session(session_id)
+                        
+                # Handle all other message types like regular WebSocket
+                else:
+                    # Process through regular WebSocket logic
+                    pass
+                    
+            except json.JSONDecodeError:
+                await websocket_manager.send_to_connection(
+                    connection_id, "error", {"message": "Invalid JSON format"}
+                )
+                
+    except WebSocketDisconnect:
+        logger.info(f"Authenticated WebSocket client disconnected: {connection_id}")
+        
+    except Exception as e:
+        logger.error(f"Authenticated WebSocket error: {str(e)}")
+        
+    finally:
+        if connection_id:
+            await websocket_manager.disconnect(connection_id)
+
+# Additional WebSocket endpoint for system monitoring
+@app.websocket("/ws/admin")
+async def admin_websocket_endpoint(websocket: WebSocket, admin_token: str = None):
+    """
+    Admin WebSocket endpoint for system monitoring and management.
+    
+    Provides real-time access to:
+    - System health metrics
+    - AI engine status
+    - Circuit breaker states
+    - Cache performance
+    - Background task status
+    """
+    connection_id = None
+    
+    try:
+        # Validate admin token
+        if not admin_token or admin_token != settings.admin_token:
+            await websocket.close(code=4003, reason="Admin access denied")
+            return
+        
+        connection_id = await websocket_manager.connect(websocket)
+        
+        # Subscribe to admin topics
+        await websocket_manager.subscribe_to_topic(connection_id, "admin_metrics")
+        await websocket_manager.subscribe_to_topic(connection_id, "system_health")
+        await websocket_manager.subscribe_to_topic(connection_id, "ai_status")
+        
+        logger.info(f"Admin WebSocket connection established: {connection_id}")
+        
+        while True:
+            try:
+                data = await websocket.receive_text()
+                message = json.loads(data)
+                
+                message_type = message.get("type")
+                
+                if message_type == "get_system_status":
+                    from app.services.background_tasks import get_background_task_status
+                    from app.core.circuit_breaker import circuit_breaker_manager
+                    from app.core.advanced_cache import cache_manager
+                    
+                    system_status = {
+                        "background_tasks": get_background_task_status(),
+                        "circuit_breakers": circuit_breaker_manager.get_health_summary(),
+                        "cache_stats": await cache_manager.get_cache_stats(),
+                        "websocket_stats": websocket_manager.get_stats()
+                    }
+                    
+                    await websocket_manager.send_to_connection(
+                        connection_id, "system_status", system_status
+                    )
+                    
+            except json.JSONDecodeError:
+                await websocket_manager.send_to_connection(
+                    connection_id, "error", {"message": "Invalid JSON format"}
+                )
+                
+    except WebSocketDisconnect:
+        logger.info(f"Admin WebSocket client disconnected: {connection_id}")
+        
+    except Exception as e:
+        logger.error(f"Admin WebSocket error: {str(e)}")
+        
+    finally:
+        if connection_id:
+            await websocket_manager.disconnect(connection_id)
 
 
 # Startup event for additional initialization

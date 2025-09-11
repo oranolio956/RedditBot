@@ -42,7 +42,7 @@ from app.models.emotional_intelligence import (
 )
 from app.models.user import User
 from app.models.conversation import Message, Conversation
-from app.database.session import get_db
+from app.database.connection import get_db_session as get_db
 from app.core.config import settings
 
 

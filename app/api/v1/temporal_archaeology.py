@@ -18,7 +18,7 @@ from sqlalchemy import select, update, and_, func
 from pydantic import BaseModel, Field, validator
 import redis.asyncio as redis
 
-from app.database.session import get_db
+from app.database.connection import get_db_session as get_db
 from app.core.redis import get_redis
 from app.models.user import User
 from app.models.temporal_archaeology import (
